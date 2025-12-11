@@ -17,6 +17,12 @@ struct ContentMenu: View {
             
             Divider()
             
+            Button("Check for Updates...") {
+                appState.checkUpdates()
+            }
+            
+            Divider()
+            
             Button("Sair") {
                 NSApplication.shared.terminate(nil)
             }

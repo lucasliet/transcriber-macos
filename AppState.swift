@@ -25,8 +25,14 @@ class AppState: ObservableObject {
         
         self.hotkeyDisplay = settingsManager.currentHotkey.displayString
         
+        
         setupHotkeyCallbacks()
         hotkeyManager.register(keyCombination: settingsManager.currentHotkey)
+        
+        // Auto Update Check (runs detached/background)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            UpdateManager.shared.checkForUpdates()
+        }
     }
     
     private func setupHotkeyCallbacks() {
@@ -91,5 +97,9 @@ class AppState: ObservableObject {
         hotkeyManager.unregister()
         hotkeyManager.register(keyCombination: keyCombination)
         hotkeyDisplay = keyCombination.displayString
+    }
+    
+    func checkUpdates() {
+        UpdateManager.shared.checkForUpdates(isUserInitiated: true)
     }
 }

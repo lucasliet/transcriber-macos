@@ -95,6 +95,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set App Version
+        run: |
+          # Extract version from tag (remove 'v' prefix)
+          VERSION=${{ github.ref_name }}
+          VERSION=${VERSION#v}
+          echo "Setting app version to $VERSION"
+          
+          # Update Info.plist
+          plutil -replace CFBundleShortVersionString -string "$VERSION" Info.plist
+          plutil -replace CFBundleVersion -string "$VERSION" Info.plist
+
       - name: Build App
         run: |
           chmod +x build.sh

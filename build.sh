@@ -25,6 +25,7 @@ SOURCES=(
     "$PROJECT_DIR/Services/TranscriptionService.swift"
     "$PROJECT_DIR/Services/TextPaster.swift"
     "$PROJECT_DIR/Services/SettingsManager.swift"
+    "$PROJECT_DIR/Services/UpdateManager.swift"
 )
 
 echo "📦 Compiling Swift sources..."
