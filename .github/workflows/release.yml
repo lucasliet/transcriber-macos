@@ -1,0 +1,35 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build App
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Create ZIP
+        run: |
+          cd build
+          ditto -c -k --keepParent Transcriber.app Transcriber.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/Transcriber.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

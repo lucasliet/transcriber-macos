@@ -38,6 +38,16 @@ building, favoring direct `swiftc` compilation via script.
 - **Verification**: Run the app, verify Accessibilty permissions, test the
   global hotkey (default `⌥⌘T`), and verify transcription paste.
 
+## Continuous Integration & Deployment
+
+- **Workflow**: `.github/workflows/release.yml`
+- **Trigger**: Pushing a tag starting with `v` (e.g., `v1.0.0`).
+- **Output**: Creates a GitHub Release with `Transcriber.zip` (containing the
+  signed app).
+- **Note**: The automated build uses ad-hoc signing. Users might need to
+  right-click > Open to bypass Gatekeeper initially unless a valid Developer ID
+  certificate is added to the workflow secrets.
+
 ## Commit & Pull Request Guidelines
 
 - **Commits**: Use semantic commit messages (e.g., `feat: add settings view`,
