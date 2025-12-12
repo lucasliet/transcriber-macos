@@ -23,8 +23,11 @@ public class HotkeyManager {
         currentHotkey = keyCombination
         setupEventTap()
         #else
-        // TODO: Linux implementation using evdev or similar
-        print("Hotkey registration on Linux not implemented yet")
+        currentHotkey = keyCombination
+        // Linux global hotkeys require elevated permissions via evdev/uinput.
+        // Users should use the system tray menu to start/stop recording,
+        // or configure a system-level hotkey using their desktop environment.
+        print("ℹ️ Global hotkeys on Linux: Use the system tray menu or configure \(keyCombination.displayString) in your desktop environment settings.")
         #endif
     }
     

@@ -25,8 +25,13 @@ public struct KeyCombination: Codable, Equatable {
     public var displayString: String {
         #if os(Linux)
         var parts: [String] = []
-        // TODO: Implement display logic for Linux based on modifiers
-        return "Ctrl+Alt+T" 
+        // Linux modifier flags: Ctrl=4, Alt=8, Shift=1, Super=64
+        if modifiers & 4 != 0 { parts.append("Ctrl") }
+        if modifiers & 8 != 0 { parts.append("Alt") }
+        if modifiers & 1 != 0 { parts.append("Shift") }
+        if modifiers & 64 != 0 { parts.append("Super") }
+        parts.append(linuxKeyCodeToString(keyCode))
+        return parts.joined(separator: "+")
         #else
         var parts: [String] = []
         
@@ -40,6 +45,22 @@ public struct KeyCombination: Codable, Equatable {
         return parts.joined()
         #endif
     }
+    
+    #if os(Linux)
+    private func linuxKeyCodeToString(_ keyCode: UInt32) -> String {
+        // evdev key codes for common keys
+        let keyMap: [UInt32: String] = [
+            16: "Q", 17: "W", 18: "E", 19: "R", 20: "T", 21: "Y", 22: "U", 23: "I", 24: "O", 25: "P",
+            30: "A", 31: "S", 32: "D", 33: "F", 34: "G", 35: "H", 36: "J", 37: "K", 38: "L",
+            44: "Z", 45: "X", 46: "C", 47: "V", 48: "B", 49: "N", 50: "M",
+            2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9", 11: "0",
+            59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5", 64: "F6",
+            65: "F7", 66: "F8", 67: "F9", 68: "F10", 87: "F11", 88: "F12",
+            57: "Space", 28: "T"
+        ]
+        return keyMap[keyCode] ?? "Key\(keyCode)"
+    }
+    #endif
     
     private func keyCodeToString(_ keyCode: UInt32) -> String {
         let keyMap: [UInt32: String] = [
