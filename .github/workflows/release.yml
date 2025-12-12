@@ -51,7 +51,7 @@ jobs:
             GUIDELINES:
             - Start with the title '# Transcriber ${{ github.ref_name }}'
             - Write a brief, engaging summary paragraph explaining what this release achieves.
-            - Group changes into 'Key Features' and 'Bug Fixes'.
+            - Group changes into '## Key Features' (if there are any) and '## Bug Fixes' (if there are any).
             - Use bullet points.
             - Be concise but descriptive.
             - Ignore trivial commits (docs, chores) unless significant.
