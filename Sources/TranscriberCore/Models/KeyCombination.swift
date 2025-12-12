@@ -1,16 +1,33 @@
 import Foundation
 import Carbon
 
-struct KeyCombination: Codable, Equatable {
-    let keyCode: UInt32
-    let modifiers: UInt32
+public struct KeyCombination: Codable, Equatable {
+    public let keyCode: UInt32
+    public let modifiers: UInt32
+
+    public init(keyCode: UInt32, modifiers: UInt32) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
     
-    static let defaultHotkey = KeyCombination(
+    #if os(Linux)
+    public static let defaultHotkey = KeyCombination(
+        keyCode: 28,  // T key in evdev
+        modifiers: 12 // Ctrl (4) + Alt (8) - Simplicado, ajustaremos conforme input lib
+    )
+    #else
+    public static let defaultHotkey = KeyCombination(
         keyCode: UInt32(kVK_ANSI_T),
         modifiers: UInt32(optionKey | cmdKey)
     )
+    #endif
     
-    var displayString: String {
+    public var displayString: String {
+        #if os(Linux)
+        var parts: [String] = []
+        // TODO: Implement display logic for Linux based on modifiers
+        return "Ctrl+Alt+T" 
+        #else
         var parts: [String] = []
         
         if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
@@ -21,6 +38,7 @@ struct KeyCombination: Codable, Equatable {
         parts.append(keyCodeToString(keyCode))
         
         return parts.joined()
+        #endif
     }
     
     private func keyCodeToString(_ keyCode: UInt32) -> String {

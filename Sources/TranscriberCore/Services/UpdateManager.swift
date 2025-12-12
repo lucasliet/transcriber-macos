@@ -1,7 +1,8 @@
-import Foundation
+#if canImport(AppKit)
 import AppKit
+#endif
 
-struct GitHubRelease: Codable {
+public struct GitHubRelease: Codable {
     let tagName: String
     let assets: [GitHubAsset]
     let htmlUrl: String
@@ -13,7 +14,7 @@ struct GitHubRelease: Codable {
     }
 }
 
-struct GitHubAsset: Codable {
+public struct GitHubAsset: Codable {
     let browserDownloadUrl: String
     let name: String
     
@@ -23,8 +24,8 @@ struct GitHubAsset: Codable {
     }
 }
 
-class UpdateManager: ObservableObject {
-    static let shared = UpdateManager()
+public class UpdateManager: ObservableObject {
+    public static let shared = UpdateManager()
     
     // Config
     private let repoOwner = "lucasliet"
@@ -33,7 +34,7 @@ class UpdateManager: ObservableObject {
     
     private init() {}
     
-    func checkForUpdates(isUserInitiated: Bool = false) {
+    public func checkForUpdates(isUserInitiated: Bool = false) {
         // 1. Check Daily Limit (if not user initiated)
         if !isUserInitiated {
             let lastCheck = UserDefaults.standard.object(forKey: defaultsKeyLastCheck) as? Date ?? Date.distantPast
@@ -58,10 +59,14 @@ class UpdateManager: ObservableObject {
                     }
                 } else if isUserInitiated {
                      await MainActor.run {
+                        #if os(macOS)
                         let alert = NSAlert()
                         alert.messageText = "You're up to date!"
                         alert.informativeText = "Transcriber \(release.tagName) is the latest version."
                         alert.runModal()
+                        #else
+                        print("You're up to date! \(release.tagName)")
+                        #endif
                     }
                 }
                 

@@ -85,42 +85,105 @@ jobs:
           cat RELEASE_BODY.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-  build-and-release:
-    name: Build and Release
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          # Simple script to generate notes from commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            NOTES=$(git log --pretty=format:"* %s" HEAD)
+          else
+            NOTES=$(git log --pretty=format:"* %s" ${LAST_TAG}..HEAD)
+          fi
+          # Escape newlines
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          echo "release_notes=$NOTES" >> $GITHUB_OUTPUT
+
+  build-mac:
+    name: Build macOS
     needs: generate-notes
     runs-on: macos-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set App Version
+      - uses: actions/checkout@v4
+      
+      - name: Build and Archive
         run: |
-          # Extract version from tag (remove 'v' prefix)
-          VERSION=${{ github.ref_name }}
-          VERSION=${VERSION#v}
-          echo "Setting app version to $VERSION"
-          
-          # Update Info.plist
-          plutil -replace CFBundleShortVersionString -string "$VERSION" Info.plist
-          plutil -replace CFBundleVersion -string "$VERSION" Info.plist
-
-      - name: Build App
-        run: |
-          chmod +x build.sh
           ./build.sh
-
-      - name: Create ZIP
-        run: |
-          cd build
-          ditto -c -k --keepParent Transcriber.app Transcriber.zip
-
-      - name: Create Release
+          
+          # Create Zip
+          zip -r Transcriber.zip Transcriber.app
+          
+      - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/Transcriber.zip
-          draft: false
-          prerelease: false
+          files: Transcriber.zip
           body: ${{ needs.generate-notes.outputs.release_notes }}
-          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Build Linux
+    needs: generate-notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev gir1.2-gtksource-3.0 \
+            libpango1.0-dev gir1.2-pango-1.0 libgdk-pixbuf2.0-dev \
+            gobject-introspection libgirepository1.0-dev libxml2-dev \
+            libpulse-dev xclip xdotool jq wget
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.10'
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Create AppImage
+        run: |
+          # Setup AppDir
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/share/applications
+          
+          cp .build/release/transcriber-linux AppDir/usr/bin/transcriber
+          
+          # Copy resources
+          cp Media/AppIcon.png AppDir/transcriber.png
+          cp Media/AppIcon.png AppDir/usr/share/icons/hicolor/256x256/apps/transcriber.png
+          
+          # Create Desktop File
+          cat > AppDir/transcriber.desktop <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Transcriber
+          Exec=transcriber
+          Icon=transcriber
+          Categories=Utility;
+          EOF
+          
+          cp AppDir/transcriber.desktop AppDir/usr/share/applications/
+          
+          # Use linuxdeploy
+          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+          
+          # Run linuxdeploy
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+
+      - name: Rename AppImage
+        run: mv Transcriber*.AppImage Transcriber-Linux-x86_64.AppImage
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: Transcriber-Linux-x86_64.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

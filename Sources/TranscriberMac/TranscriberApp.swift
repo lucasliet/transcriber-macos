@@ -1,4 +1,5 @@
 import SwiftUI
+import TranscriberCore
 
 @main
 struct TranscriberApp: App {

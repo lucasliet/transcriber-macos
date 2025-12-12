@@ -39,14 +39,36 @@ your active application.
 
 3. The application will be located at `build/Transcriber.app`.
 
-### Running
+### macOS
 
-1. Double-click `Transcriber.app` in the `build` folder.
-2. **Permissions:**
-   - **Accessibility:** Grant permission when prompted (or go to System Settings
-     > Privacy & Security > Accessibility). Any issue, check
-     > `~/Documents/Transcriber.log`.
-   - **Microphone:** Grant permission when prompted.
+1. Download the latest `Transcriber.zip` from
+   [Releases](https://github.com/lucasliet/transcriber-macos/releases).
+2. Unzip and move `Transcriber.app` to your Applications folder.
+3. Open the app. You may need to allow it in System Settings > Privacy &
+   Security > Accessibility (for pasting text) and Microphone.
+
+### Linux
+
+1. Download the latest `Transcriber-Linux-x86_64.AppImage` from
+   [Releases](https://github.com/lucasliet/transcriber-macos/releases).
+2. Install dependencies (Ubuntu/Debian):
+   ```bash
+   sudo apt install libgtk-3-0 xclip xdotool
+   ```
+3. Make executable and run:
+   ```bash
+   chmod +x Transcriber-Linux-x86_64.AppImage
+   ./Transcriber-Linux-x86_64.AppImage
+   ```
+
+## Requirements (Linux)
+
+- **xclip**: For clipboard management.
+- **xdotool**: For simulating paste (Ctrl+V).
+- **libgtk-3**: Core UI library.
+- **Microphone**: Ensure input is configured in PulseAudio/PipeWire.
+
+## Usage
 
 ## Development
 

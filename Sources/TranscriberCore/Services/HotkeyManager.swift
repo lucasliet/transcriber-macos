@@ -1,23 +1,35 @@
 import Foundation
+#if !os(Linux)
 import Carbon
+#endif
 
-class HotkeyManager {
-    var onHotkeyDown: (() -> Void)?
-    var onHotkeyUp: (() -> Void)?
+public class HotkeyManager {
+    public var onHotkeyDown: (() -> Void)?
+    public var onHotkeyUp: (() -> Void)?
     
+    #if !os(Linux)
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    #endif
     private var currentHotkey: KeyCombination?
     private var isHotkeyPressed = false
     private var pressedModifiers: UInt32 = 0
     private var pressedKeyCode: UInt32?
     
-    func register(keyCombination: KeyCombination) {
+    public init() {}
+    
+    public func register(keyCombination: KeyCombination) {
+        #if !os(Linux)
         currentHotkey = keyCombination
         setupEventTap()
+        #else
+        // TODO: Linux implementation using evdev or similar
+        print("Hotkey registration on Linux not implemented yet")
+        #endif
     }
     
-    func unregister() {
+    public func unregister() {
+        #if !os(Linux)
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
             runLoopSource = nil
@@ -27,12 +39,14 @@ class HotkeyManager {
             CGEvent.tapEnable(tap: tap, enable: false)
             eventTap = nil
         }
+        #endif
         
         isHotkeyPressed = false
         pressedModifiers = 0
         pressedKeyCode = nil
     }
     
+    #if !os(Linux)
     private func setupEventTap() {
         unregister()
         
@@ -140,6 +154,9 @@ class HotkeyManager {
         if flags.contains(.maskCommand) { result |= UInt32(cmdKey) }
         return result
     }
+    
+    }
+    #endif
     
     deinit {
         unregister()

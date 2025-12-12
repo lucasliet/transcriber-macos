@@ -1,22 +1,31 @@
-import SwiftUI
+import Foundation
+#if canImport(Combine)
 import Combine
+#else
+import OpenCombine
+import OpenCombineDispatch
+import OpenCombineFoundation
+#endif
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 @MainActor
-class AppState: ObservableObject {
-    @Published var isRecording = false
-    @Published var statusMessage = "Pronto para gravar"
-    @Published var showingHotkeySettings = false
-    @Published var hotkeyDisplay: String = ""
+public class AppState: ObservableObject {
+    @Published public var isRecording = false
+    @Published public var statusMessage = "Pronto para gravar"
+    @Published public var showingHotkeySettings = false
+    @Published public var hotkeyDisplay: String = ""
     
     let hotkeyManager: HotkeyManager
     let audioRecorder: AudioRecorder
     let transcriptionService: TranscriptionService
     let textPaster: TextPaster
-    let settingsManager: SettingsManager
+    public let settingsManager: SettingsManager
     
     private var cancellables = Set<AnyCancellable>()
     
-    init() {
+    public init() {
         self.settingsManager = SettingsManager()
         self.hotkeyManager = HotkeyManager()
         self.audioRecorder = AudioRecorder()
