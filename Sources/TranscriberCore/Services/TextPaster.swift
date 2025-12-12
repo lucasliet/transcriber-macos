@@ -56,7 +56,13 @@ public class TextPaster {
             print("TextPaster Error: \(error)")
         }
         #else
+        guard AXIsProcessTrusted() else {
+            print("TextPaster Error: Accessibility permissions required. Grant access in System Preferences > Security & Privacy > Accessibility.")
+            return
+        }
+        
         let pasteboard = NSPasteboard.general
+        let previousContents = pasteboard.string(forType: .string)
         let previousChangeCount = pasteboard.changeCount
         
         pasteboard.clearContents()
@@ -64,9 +70,12 @@ public class TextPaster {
         
         simulatePaste()
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if pasteboard.changeCount == previousChangeCount + 1 {
-                // Only restore if no other copy happened
+        if let previous = previousContents {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if pasteboard.changeCount == previousChangeCount + 1 {
+                    pasteboard.clearContents()
+                    pasteboard.setString(previous, forType: .string)
+                }
             }
         }
         #endif

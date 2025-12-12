@@ -70,6 +70,27 @@ your active application.
 
 ## Usage
 
+### Recording
+
+1. **Press the hotkey** (`⌥⌘T` on macOS, `Ctrl+Alt+T` on Linux) to start
+   recording
+2. **Speak** your message clearly
+3. **Release the hotkey** to stop recording and auto-transcribe
+4. The transcribed text is **automatically pasted** at your cursor position
+
+### Configuring Hotkey
+
+- **macOS**: Right-click the menu bar icon → "Configurar Atalho" to change the
+  hotkey
+- **Linux**: Global hotkeys are not yet implemented. Use the **system tray
+  menu** to start/stop recording. Alternatively, configure `Ctrl+Alt+T` as a
+  custom shortcut in your desktop environment to launch the recording action.
+
+### API
+
+Transcriber uses ElevenLabs' free speech-to-text API. No API key required for
+basic usage.
+
 ## Development
 
 ### Project Structure

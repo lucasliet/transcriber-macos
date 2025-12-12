@@ -3,14 +3,15 @@ import PackageDescription
 
 let package = Package(
     name: "Transcriber",
-    platforms: [.macOS(.v13)],
     products: [
         .executable(name: "transcriber-linux", targets: ["TranscriberLinux"]),
         .library(name: "TranscriberCore", targets: ["TranscriberCore"])
     ],
     dependencies: [
-        .package(url: "https://github.com/rhx/gir2swift.git", branch: "main"),
-        .package(url: "https://github.com/rhx/SwiftGtk.git", branch: "gtk3"),
+        // Note: gir2swift and SwiftGtk don't have stable releases yet.
+        // These are pinned to specific commits for reproducibility.
+        .package(url: "https://github.com/rhx/gir2swift.git", revision: "5e36269"),
+        .package(url: "https://github.com/rhx/SwiftGtk.git", revision: "1c7e0f9"),
         .package(url: "https://github.com/OpenCombine/OpenCombine.git", from: "0.14.0")
     ],
     targets: [

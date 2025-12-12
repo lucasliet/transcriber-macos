@@ -137,7 +137,16 @@ jobs:
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           mkdir -p AppDir/usr/share/applications
           
-          cp .build/release/transcriber-linux AppDir/usr/bin/transcriber
+          # Find the binary (SPM may use different naming)
+          if [ -f ".build/release/transcriber-linux" ]; then
+            cp .build/release/transcriber-linux AppDir/usr/bin/transcriber
+          elif [ -f ".build/release/TranscriberLinux" ]; then
+            cp .build/release/TranscriberLinux AppDir/usr/bin/transcriber
+          else
+            echo "❌ Error: Binary not found in .build/release/"
+            ls -la .build/release/
+            exit 1
+          fi
           
           # Copy resources
           cp Media/AppIcon.png AppDir/transcriber.png
