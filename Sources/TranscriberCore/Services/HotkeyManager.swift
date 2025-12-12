@@ -154,8 +154,6 @@ public class HotkeyManager {
         if flags.contains(.maskCommand) { result |= UInt32(cmdKey) }
         return result
     }
-    
-    }
     #endif
     
     deinit {

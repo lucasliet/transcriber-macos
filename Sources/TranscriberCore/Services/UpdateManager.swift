@@ -1,3 +1,4 @@
+import Foundation
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -78,12 +79,14 @@ public class UpdateManager: ObservableObject {
             } catch {
                 print("UpdateManager: Check failed: \(error)")
                 if isUserInitiated {
+                    #if os(macOS)
                     await MainActor.run {
                         let alert = NSAlert()
                         alert.messageText = "Update Check Failed"
                         alert.informativeText = error.localizedDescription
                         alert.runModal()
                     }
+                    #endif
                 }
             }
         }
@@ -100,6 +103,7 @@ public class UpdateManager: ObservableObject {
         return cleanTag.compare(cleanCurrent, options: .numeric) == .orderedDescending
     }
     
+    #if os(macOS)
     @MainActor
     private func promptUpdate(release: GitHubRelease) {
         let alert = NSAlert()
@@ -113,7 +117,9 @@ public class UpdateManager: ObservableObject {
             downloadAndInstall(release: release)
         }
     }
+    #endif
     
+    #if os(macOS)
     private func downloadAndInstall(release: GitHubRelease) {
         guard let asset = release.assets.first(where: { $0.name.hasSuffix(".zip") }) else {
             print("UpdateManager: No zip asset found.")
@@ -139,7 +145,9 @@ public class UpdateManager: ObservableObject {
             }
         }
     }
+    #endif
     
+    #if os(macOS)
     private func installUpdate(from tempZipUrl: URL) throws {
         // 1. Prepare Paths
         let fileManager = FileManager.default
@@ -209,4 +217,5 @@ public class UpdateManager: ObservableObject {
         
         NSApplication.shared.terminate(self)
     }
+    #endif
 }

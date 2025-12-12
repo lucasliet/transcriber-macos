@@ -3,6 +3,12 @@ import Gtk
 import Foundation
 import OpenCombine
 
+class SubscriptionHolder {
+    var set = Set<AnyCancellable>()
+}
+
+let globalHolder = SubscriptionHolder()
+
 // Initialize GTK
 guard let status = Application.run(startupHandler: { app in
     print("Transcriber for Linux started")
@@ -11,8 +17,6 @@ guard let status = Application.run(startupHandler: { app in
     let appState = AppState()
     
     // Create Status Icon (System Tray)
-    // Note: In a real deployment, we'd look for the icon in standard paths.
-    // Here we'll try relative path or fallback to a standard name.
     let iconPath = "transcriber.png" 
     let statusIcon = StatusIcon(file: iconPath) ?? StatusIcon(stock: .yes)
     statusIcon.tooltipText = "Transcriber"
@@ -50,44 +54,23 @@ guard let status = Application.run(startupHandler: { app in
         menu.popup(at: nil, button: Int(button), time: time)
     }
     
-    // Observe State Changes
+    // Observe State Changes using global holder
     appState.$statusMessage
         .sink { msg in
             DispatchQueue.main.async {
                 statusItem.label = msg
             }
         }
-        .store(in: &appState.cancellables) // Need to expose cancellables or hold locally?
-        // AppState cancellables is private. access via property if needed or just let it live?
-        // Actually sink returns a cancellable we need to keep alive.
-        // We'll keep a reference here but we are in a closure.
-        // SwiftGtk main loop runs indefinitely.
+        .store(in: &globalHolder.set)
     
     appState.$isRecording
         .sink { isRecording in
             DispatchQueue.main.async {
-                 recordItem.label = isRecording ? "Parar Gravação" : "Iniciar Gravação"
+                recordItem.label = isRecording ? "Parar Gravação" : "Iniciar Gravação"
             }
         }
-        .store(in: &appState.cancellables) // Can't access private 'cancellables' of appState.
-        
-    // Workaround: Store subscriptions in global holder
-    globalHolder.set = holder.set
+        .store(in: &globalHolder.set)
     
 }) else {
     fatalError("Failed to initialize GTK application")
 }
-
-func runOnMain(_ block: @escaping () -> Void) {
-    if Thread.isMainThread {
-        block()
-    } else {
-        DispatchQueue.main.async(execute: block)
-    }
-}
-
-class SubscriptionHolder {
-    var set = Set<AnyCancellable>()
-}
-
-let globalHolder = SubscriptionHolder()

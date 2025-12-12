@@ -1,4 +1,5 @@
 import Foundation
+#if canImport(AppKit)
 import AppKit
 import Carbon
 #endif
@@ -53,6 +54,7 @@ public class TextPaster {
         #endif
     }
     
+    #if os(macOS)
     private func simulatePaste() {
         let source = CGEventSource(stateID: .hidSystemState)
         
@@ -65,4 +67,5 @@ public class TextPaster {
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
     }
+    #endif
 }
