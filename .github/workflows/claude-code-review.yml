@@ -1,0 +1,227 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  id-token: write
+  actions: read 
+
+jobs:
+  gather_context:
+    runs-on: ubuntu-latest
+    outputs:
+      previous_reviews: ${{ steps.context.outputs.previous_reviews }}
+      has_previous: ${{ steps.context.outputs.has_previous }}
+      ai_model: ${{ steps.context.outputs.ai_model }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Minimize previous review comments
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews?per_page=100" --jq '.[] | select(.user.login == "github-actions[bot]") | .node_id')
+          
+          echo "$COMMENTS" | while read NODE_ID; do
+            [ -z "$NODE_ID" ] && continue
+            echo "Minimizando comentário: $NODE_ID"
+            gh api graphql -f query='
+              mutation {
+                minimizeComment(input: {subjectId: "'$NODE_ID'", classifier: OUTDATED}) {
+                  minimizedComment {
+                    isMinimized
+                  }
+                }
+              }
+            '
+          done
+
+      - name: Get previous bot reviews
+        id: context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Busca reviews anteriores do bot
+          REVIEWS=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews?per_page=100" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]")]')
+          
+          # Se não houver reviews, define valores padrão
+          if [ -z "$REVIEWS" ] || [ "$REVIEWS" = "[]" ]; then
+            echo "ai_model=claude-opus-4-5" >> $GITHUB_OUTPUT
+            echo "has_previous=false" >> $GITHUB_OUTPUT
+            echo "previous_reviews=[]" >> $GITHUB_OUTPUT
+            echo "Usando claude-opus-4-5 (primeira review)"
+            exit 0
+          fi
+
+          echo "ai_model=claude-sonnet-4-5" >> $GITHUB_OUTPUT
+          echo "has_previous=true" >> $GITHUB_OUTPUT
+          echo "Usando claude-sonnet-4-5 (review de acompanhamento)"
+          
+          # Constroi o JSON com reviews e seus comentários
+          FULL_CONTEXT=$(echo "$REVIEWS" | jq -c '.[]' | while read -r review; do
+            ID=$(echo "$review" | jq -r .id)
+            BODY=$(echo "$review" | jq -r .body)
+            DATE=$(echo "$review" | jq -r .submitted_at)
+            COMMIT_ID=$(echo "$review" | jq -r .commit_id)
+            
+            # Busca comentários inline deste review específico
+            COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews/$ID/comments" \
+              --jq '[.[] | {path: .path, line: .line, body: .body}]')
+            
+            # Monta objeto unificado
+            jq -n \
+              --arg date "$DATE" \
+              --arg body "$BODY" \
+              --arg commit_id "$COMMIT_ID" \
+              --argjson comments "$COMMENTS" \
+              '{created_at: $date, commit_id: $commit_id, summary: $body, inline_comments: $comments}'
+          done | jq -s '.')
+          
+          # Output multi-line string safely
+          echo "previous_reviews<<EOF" >> $GITHUB_OUTPUT
+          echo "$FULL_CONTEXT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  analysis:
+    needs: gather_context
+    runs-on: ubuntu-latest
+    outputs:
+      structured_output: ${{ steps.claude.outputs.structured_output }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 
+
+      - name: Run Claude Code Review
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD COMMIT: ${{ github.event.pull_request.head.sha }}
+            HAS PREVIOUS BOT REVIEWS: ${{ needs.gather_context.outputs.has_previous }}
+            
+            PREVIOUS BOT REVIEWS (For Diff Scope context):
+            ${{ needs.gather_context.outputs.previous_reviews }}
+
+            ---
+
+            Review this PR. Use `gh pr diff ${{ github.event.pull_request.number }}` to see the changes.
+            Use `gh pr view ${{ github.event.pull_request.number }} --comments` to see HUMAN REVIEW comments (replied by others). Do not repeat their suggestions. If you agree, you can reply to them backing them up.
+            
+            If HAS PREVIOUS BOT REVIEWS is true:
+            1. Check if previous suggestions were addressed.
+            2. If a critical suggestion/issue was NOT addressed, you MUST add it to the `comments` array again (pointing to the line) to ensure it gets fixed.
+            3. Scope review ONLY on NEW commits since the last review (use the commit_id from previous reviews to find the range).
+            4. Note which issues were fixed in your summary. Use `comments` array for persistent issues.
+
+            Analyze for:
+            - Code quality and best practices
+            - Potential bugs
+            - Performance issues
+            - Security concerns
+
+            Do not nitpick, focus on blocking issues only.
+            
+            Check AGENTS.md and GEMINI.md for style conventions.
+
+            CRITICAL: To avoid "Line could not be resolved" errors, every comment's `line` MUST be part of the diff (added or modified lines, or immediate context). Verify line numbers against `gh pr diff`. If a line is not in the diff, put the comment in the `summary` instead.
+
+            IMPORTANT: Return your review as structured output matching the JSON schema.
+            - summary: High-level overview and status of fixes. Do NOT include granular code comments here; use the `comments` array. End with "## Veredito..." followed by "**Status**: (Aprovado/Requer Mudanças)\n\n**Justificativa**: <reasoning>".
+            - verdict: COMMENT (for approval or suggestions) or REQUEST_CHANGES (blocking issues).
+            - comments: Array of inline comments with path, line, body. Use this for ALL specific code feedback.
+            - replies: Array of replies to existing comments.
+            
+            All text in Brazilian Portuguese.
+          
+          claude_args: >-
+            --model ${{ needs.gather_context.outputs.ai_model }}
+            --allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --json-schema '{
+              "type": "object",
+              "properties": {
+                "summary": {"type": "string", "description": "Full review summary in markdown"},
+                "verdict": {"type": "string", "enum": ["REQUEST_CHANGES", "COMMENT"]},
+                "comments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {"type": "string"},
+                      "line": {"type": "integer"},
+                      "body": {"type": "string"}
+                    },
+                    "required": ["path", "line", "body"]
+                  }
+                },
+                "replies": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "reply_to_id": {"type": "string", "description": "ID of the comment to reply to (node_id or database id)"},
+                      "body": {"type": "string"}
+                    },
+                    "required": ["reply_to_id", "body"]
+                  }
+                }
+              },
+              "required": ["summary", "verdict", "comments"]
+            }'
+
+  publish_review:
+    needs: analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post review to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STRUCTURED='${{ needs.analysis.outputs.structured_output }}'
+          
+          if [ -z "$STRUCTURED" ] || [ "$STRUCTURED" = "null" ]; then
+            echo "No structured output from Claude!"
+            exit 1
+          fi
+          
+          SUMMARY=$(echo "$STRUCTURED" | jq -r '.summary')
+          VERDICT=$(echo "$STRUCTURED" | jq -r '.verdict')
+          COMMENTS=$(echo "$STRUCTURED" | jq -c '.comments // []')
+          REPLIES=$(echo "$STRUCTURED" | jq -c '.replies // []')
+          
+          # 1. Post Main Review
+          PAYLOAD=$(jq -n \
+            --arg commit_id "${{ github.event.pull_request.head.sha }}" \
+            --arg event "$VERDICT" \
+            --arg body "$SUMMARY" \
+            --argjson comments "$COMMENTS" \
+            '{commit_id: $commit_id, event: $event, body: $body, comments: $comments}')
+          
+          echo "Posting review..."
+          echo "$PAYLOAD" | gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews --input -
+          
+          # 2. Post Replies to existing threads
+          echo "$REPLIES" | jq -c '.[]' | while read -r reply; do
+            REPLY_TO_ID=$(echo "$reply" | jq -r .reply_to_id)
+            BODY=$(echo "$reply" | jq -r .body)
+            
+            [ -z "$REPLY_TO_ID" ] && continue
+            
+            echo "Replying to comment $REPLY_TO_ID..."
+            gh api "repos/${{ github.repository }}/pulls/comments/$REPLY_TO_ID/replies" \
+               -f body="$BODY" || echo "Failed to reply to $REPLY_TO_ID"
+          done
