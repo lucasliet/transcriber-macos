@@ -12,8 +12,8 @@ public struct KeyCombination: Codable, Equatable {
     
     #if os(Linux)
     public static let defaultHotkey = KeyCombination(
-        keyCode: 28,  // T key in evdev
-        modifiers: 12 // Ctrl (4) + Alt (8) - Simplicado, ajustaremos conforme input lib
+        keyCode: 20,  // KEY_T in evdev (input-event-codes.h)
+        modifiers: 12 // Ctrl (4) + Alt (8)
     )
     #else
     public static let defaultHotkey = KeyCombination(
@@ -56,7 +56,7 @@ public struct KeyCombination: Codable, Equatable {
             2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9", 11: "0",
             59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5", 64: "F6",
             65: "F7", 66: "F8", 67: "F9", 68: "F10", 87: "F11", 88: "F12",
-            57: "Space", 28: "T"
+            57: "Space", 28: "Enter"
         ]
         return keyMap[keyCode] ?? "Key\(keyCode)"
     }
