@@ -1,5 +1,7 @@
 import Foundation
+#if !os(Linux)
 import AVFoundation
+#endif
 
 public enum AudioRecorderError: Error, LocalizedError {
     case permissionDenied
@@ -33,6 +35,7 @@ public class AudioRecorder: NSObject {
         #endif
     }
     
+    #if !os(Linux)
     private func requestMicrophonePermission() {
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             if !granted {
@@ -40,6 +43,7 @@ public class AudioRecorder: NSObject {
             }
         }
     }
+    #endif
     
     public func startRecording() throws {
         let tempDir = FileManager.default.temporaryDirectory
@@ -96,7 +100,7 @@ public class AudioRecorder: NSObject {
         #endif
     }
     
-    var isRecording: Bool {
+    public var isRecording: Bool {
         #if os(Linux)
         return recordingProcess?.isRunning ?? false
         #else
@@ -105,16 +109,18 @@ public class AudioRecorder: NSObject {
     }
 }
 
+#if !os(Linux)
 extension AudioRecorder: AVAudioRecorderDelegate {
-    func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+    public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         if !flag {
             print("Recording finished unsuccessfully")
         }
     }
     
-    func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
+    public func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         if let error = error {
             print("Recording encode error: \(error.localizedDescription)")
         }
     }
 }
+#endif

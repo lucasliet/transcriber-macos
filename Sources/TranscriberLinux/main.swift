@@ -1,13 +1,14 @@
 import TranscriberCore
 import Gtk
+import GLib
 import Foundation
 import OpenCombine
 
 class SubscriptionHolder {
-    var set = Set<AnyCancellable>()
+    static let shared = SubscriptionHolder()
+    var subscriptions = Set<AnyCancellable>()
+    private init() {}
 }
-
-let globalHolder = SubscriptionHolder()
 
 // Initialize GTK
 guard let status = Application.run(startupHandler: { app in
@@ -54,22 +55,26 @@ guard let status = Application.run(startupHandler: { app in
         menu.popup(at: nil, button: Int(button), time: time)
     }
     
-    // Observe State Changes using global holder
+    // Observe State Changes using GTK main loop idle
     appState.$statusMessage
         .sink { msg in
-            DispatchQueue.main.async {
-                statusItem.label = msg
+            let capturedMsg = msg
+            _ = GLib.idleAdd {
+                statusItem.label = capturedMsg
+                return false
             }
         }
-        .store(in: &globalHolder.set)
+        .store(in: &SubscriptionHolder.shared.subscriptions)
     
     appState.$isRecording
         .sink { isRecording in
-            DispatchQueue.main.async {
-                recordItem.label = isRecording ? "Parar Gravação" : "Iniciar Gravação"
+            let label = isRecording ? "Parar Gravação" : "Iniciar Gravação"
+            _ = GLib.idleAdd {
+                recordItem.label = label
+                return false
             }
         }
-        .store(in: &globalHolder.set)
+        .store(in: &SubscriptionHolder.shared.subscriptions)
     
 }) else {
     fatalError("Failed to initialize GTK application")

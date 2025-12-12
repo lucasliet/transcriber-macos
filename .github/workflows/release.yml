@@ -85,22 +85,6 @@ jobs:
           cat RELEASE_BODY.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Generate Release Notes
-        id: notes
-        run: |
-          # Simple script to generate notes from commits since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            NOTES=$(git log --pretty=format:"* %s" HEAD)
-          else
-            NOTES=$(git log --pretty=format:"* %s" ${LAST_TAG}..HEAD)
-          fi
-          # Escape newlines
-          NOTES="${NOTES//'%'/'%25'}"
-          NOTES="${NOTES//$'\n'/'%0A'}"
-          NOTES="${NOTES//$'\r'/'%0D'}"
-          echo "release_notes=$NOTES" >> $GITHUB_OUTPUT
-
   build-mac:
     name: Build macOS
     needs: generate-notes
@@ -112,8 +96,8 @@ jobs:
         run: |
           ./build.sh
           
-          # Create Zip
-          zip -r Transcriber.zip Transcriber.app
+          # Create Zip from build output
+          cd build && zip -r ../Transcriber.zip Transcriber.app
           
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -179,11 +163,18 @@ jobs:
           ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
 
       - name: Rename AppImage
-        run: mv Transcriber*.AppImage Transcriber-Linux-x86_64.AppImage
+        run: |
+          APPIMAGE=$(find . -maxdepth 1 -name '*.AppImage' -type f | head -n 1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "❌ Error: No AppImage found"
+            exit 1
+          fi
+          mv "$APPIMAGE" Transcriber-Linux-x86_64.AppImage
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: Transcriber-Linux-x86_64.AppImage
+          body: ${{ needs.generate-notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

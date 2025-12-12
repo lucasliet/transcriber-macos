@@ -6,12 +6,33 @@ import Carbon
 
 public class TextPaster {
     public init() {}
+    
+    #if os(Linux)
+    private func findExecutable(_ name: String) -> URL? {
+        let paths = ["/usr/bin", "/usr/local/bin", "/bin"]
+        for path in paths {
+            let url = URL(fileURLWithPath: path).appendingPathComponent(name)
+            if FileManager.default.isExecutableFile(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
+    }
+    #endif
 
     public func pasteText(_ text: String) {
         #if os(Linux)
-        // 1. Copy to clipboard using xclip
+        guard let xclipURL = findExecutable("xclip") else {
+            print("TextPaster Error: xclip not found. Install with: sudo apt install xclip")
+            return
+        }
+        guard let xdotoolURL = findExecutable("xdotool") else {
+            print("TextPaster Error: xdotool not found. Install with: sudo apt install xdotool")
+            return
+        }
+        
         let xclip = Process()
-        xclip.executableURL = URL(fileURLWithPath: "/usr/bin/xclip")
+        xclip.executableURL = xclipURL
         xclip.arguments = ["-selection", "clipboard", "-in"]
         
         let pipe = Pipe()
@@ -25,9 +46,8 @@ public class TextPaster {
             }
             xclip.waitUntilExit()
             
-            // 2. Simulate Ctrl+V using xdotool
             let xdotool = Process()
-            xdotool.executableURL = URL(fileURLWithPath: "/usr/bin/xdotool")
+            xdotool.executableURL = xdotoolURL
             xdotool.arguments = ["key", "ctrl+v"]
             try xdotool.run()
             xdotool.waitUntilExit()
@@ -37,18 +57,16 @@ public class TextPaster {
         }
         #else
         let pasteboard = NSPasteboard.general
-        
-        let previousContents = pasteboard.string(forType: .string)
+        let previousChangeCount = pasteboard.changeCount
         
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         
         simulatePaste()
         
-        if let previous = previousContents {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                pasteboard.clearContents()
-                pasteboard.setString(previous, forType: .string)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if pasteboard.changeCount == previousChangeCount + 1 {
+                // Only restore if no other copy happened
             }
         }
         #endif
