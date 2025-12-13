@@ -1,7 +1,12 @@
 import Foundation
+#if canImport(AppKit)
 import AppKit
+#endif
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
-struct GitHubRelease: Codable {
+public struct GitHubRelease: Codable {
     let tagName: String
     let assets: [GitHubAsset]
     let htmlUrl: String
@@ -13,7 +18,7 @@ struct GitHubRelease: Codable {
     }
 }
 
-struct GitHubAsset: Codable {
+public struct GitHubAsset: Codable {
     let browserDownloadUrl: String
     let name: String
     
@@ -23,8 +28,8 @@ struct GitHubAsset: Codable {
     }
 }
 
-class UpdateManager: ObservableObject {
-    static let shared = UpdateManager()
+public class UpdateManager: ObservableObject {
+    public static let shared = UpdateManager()
     
     // Config
     private let repoOwner = "lucasliet"
@@ -33,7 +38,7 @@ class UpdateManager: ObservableObject {
     
     private init() {}
     
-    func checkForUpdates(isUserInitiated: Bool = false) {
+    public func checkForUpdates(isUserInitiated: Bool = false) {
         // 1. Check Daily Limit (if not user initiated)
         if !isUserInitiated {
             let lastCheck = UserDefaults.standard.object(forKey: defaultsKeyLastCheck) as? Date ?? Date.distantPast
@@ -54,14 +59,22 @@ class UpdateManager: ObservableObject {
                 // 3. Compare Versions
                 if isNewerVersion(release.tagName) {
                     await MainActor.run {
+                        #if os(macOS)
                         self.promptUpdate(release: release)
+                        #else
+                        print("Nova versão disponível: \(release.tagName) — \(release.htmlUrl)")
+                        #endif
                     }
                 } else if isUserInitiated {
                      await MainActor.run {
+                        #if os(macOS)
                         let alert = NSAlert()
                         alert.messageText = "You're up to date!"
                         alert.informativeText = "Transcriber \(release.tagName) is the latest version."
                         alert.runModal()
+                        #else
+                        print("You're up to date! \(release.tagName)")
+                        #endif
                     }
                 }
                 
@@ -73,12 +86,14 @@ class UpdateManager: ObservableObject {
             } catch {
                 print("UpdateManager: Check failed: \(error)")
                 if isUserInitiated {
+                    #if os(macOS)
                     await MainActor.run {
                         let alert = NSAlert()
                         alert.messageText = "Update Check Failed"
                         alert.informativeText = error.localizedDescription
                         alert.runModal()
                     }
+                    #endif
                 }
             }
         }
@@ -95,6 +110,7 @@ class UpdateManager: ObservableObject {
         return cleanTag.compare(cleanCurrent, options: .numeric) == .orderedDescending
     }
     
+    #if os(macOS)
     @MainActor
     private func promptUpdate(release: GitHubRelease) {
         let alert = NSAlert()
@@ -108,7 +124,9 @@ class UpdateManager: ObservableObject {
             downloadAndInstall(release: release)
         }
     }
+    #endif
     
+    #if os(macOS)
     private func downloadAndInstall(release: GitHubRelease) {
         guard let asset = release.assets.first(where: { $0.name.hasSuffix(".zip") }) else {
             print("UpdateManager: No zip asset found.")
@@ -134,7 +152,9 @@ class UpdateManager: ObservableObject {
             }
         }
     }
+    #endif
     
+    #if os(macOS)
     private func installUpdate(from tempZipUrl: URL) throws {
         // 1. Prepare Paths
         let fileManager = FileManager.default
@@ -204,4 +224,5 @@ class UpdateManager: ObservableObject {
         
         NSApplication.shared.terminate(self)
     }
+    #endif
 }

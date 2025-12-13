@@ -1,6 +1,9 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
-enum TranscriptionError: Error, LocalizedError {
+public enum TranscriptionError: Error, LocalizedError {
     case networkError(String)
     case invalidResponse
     case apiError(String)
@@ -17,11 +20,13 @@ enum TranscriptionError: Error, LocalizedError {
     }
 }
 
-class TranscriptionService {
+public class TranscriptionService {
     // private let apiURL = "https://api.elevenlabs.io/v1/speech-to-text?allow_unauthenticated=1"
     private let apiURL = "https://elevenlabs-transcribe.deno.dev/transcribe"
     
-    func transcribe(audioData: Data) async throws -> String {
+    public init() {}
+    
+    public func transcribe(audioData: Data) async throws -> String {
         let boundary = UUID().uuidString
         
         var request = URLRequest(url: URL(string: apiURL)!)

@@ -40,7 +40,47 @@ building, favoring direct `swiftc` compilation via script.
 
 ## Continuous Integration & Deployment
 
-- **Workflow**: `.github/workflows/release.yml`
+- **CI/CD**: GitHub Actions workflows in `.github/workflows/`.
+  - `release.yml`: Builds macOS (zip) and Linux (AppImage) artifacts.
+
+## Linux Development (`TranscriberLinux`)
+
+### Dependencies
+
+Run the following to install required dependencies on Ubuntu/Debian:
+
+```bash
+sudo apt install libgtk-3-dev gir1.2-gtksource-3.0 libpango1.0-dev \
+    gir1.2-pango-1.0 libgdk-pixbuf2.0-dev gobject-introspection \
+    libgirepository1.0-dev libxml2-dev libpulse-dev xclip xdotool jq
+```
+
+### Build
+
+Use the helper script:
+
+```bash
+./build-linux.sh
+```
+
+Or SwiftPM directly:
+
+```bash
+swift build -c release
+```
+
+### Architecture
+
+- **Core**: Shared logic in `Sources/TranscriberCore`. Uses `#if os(Linux)` for
+  platform divergence.
+- **UI**: Uses SwiftGtk (GTK3 binding) for system tray and menus.
+- **Hotkeys**: Currently using `evdev` stubs (implementation pending). Default
+  hotkey: `Ctrl+Alt+T`.
+- **Audio**: Uses `arecord` via Process.
+- **Paste**: Uses `xclip` and `xdotool`.
+
+## Testing
+
 - **Trigger**: Pushing a tag starting with `v` (e.g., `v1.0.0`).
 - **Output**: Creates a GitHub Release with `Transcriber.zip` (containing the
   signed app).

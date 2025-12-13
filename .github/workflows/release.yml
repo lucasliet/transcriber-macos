@@ -85,42 +85,127 @@ jobs:
           cat RELEASE_BODY.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-  build-and-release:
-    name: Build and Release
+  build-mac:
+    name: Build macOS
     needs: generate-notes
     runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build and Archive
+        run: |
+          ./build.sh
+          # Create Zip from build output
+          cd build && zip -r ../Transcriber.zip Transcriber.app
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-build
+          path: Transcriber.zip
+
+  build-linux:
+    name: Build Linux
+    needs: generate-notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev gir1.2-gtksource-3.0 \
+            libpango1.0-dev gir1.2-pango-1.0 libgdk-pixbuf2.0-dev \
+            gobject-introspection libgirepository1.0-dev libxml2-dev \
+            libpulse-dev xclip xdotool jq wget libfuse2 alsa-utils
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.10'
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Create AppImage
+        run: |
+          # Setup AppDir
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/share/applications
+          
+          # Find the binary (SPM may use different naming)
+          if [ -f ".build/release/transcriber-linux" ]; then
+            cp .build/release/transcriber-linux AppDir/usr/bin/transcriber
+          elif [ -f ".build/release/TranscriberLinux" ]; then
+            cp .build/release/TranscriberLinux AppDir/usr/bin/transcriber
+          else
+            echo "❌ Error: Binary not found in .build/release/"
+            ls -la .build/release/
+            exit 1
+          fi
+          
+          # Copy resources
+          cp Media/AppIcon.png AppDir/transcriber.png
+          cp Media/AppIcon.png AppDir/usr/share/icons/hicolor/256x256/apps/transcriber.png
+          
+          # Create Desktop File
+          cat > AppDir/transcriber.desktop <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Transcriber
+          Exec=transcriber
+          Icon=transcriber
+          Categories=Utility;
+          EOF
+          
+          cp AppDir/transcriber.desktop AppDir/usr/share/applications/
+          
+          # Use linuxdeploy (pinned to stable release)
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20250213-2/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+          
+          # Run linuxdeploy
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+
+      - name: Rename AppImage
+        run: |
+          APPIMAGE=$(find . -maxdepth 1 -name '*.AppImage' -type f | head -n 1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "❌ Error: No AppImage found"
+            exit 1
+          fi
+          mv "$APPIMAGE" Transcriber-Linux-x86_64.AppImage
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: Transcriber-Linux-x86_64.AppImage
+
+  publish-release:
+    name: Publish Release
+    needs: [generate-notes, build-mac, build-linux]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set App Version
-        run: |
-          # Extract version from tag (remove 'v' prefix)
-          VERSION=${{ github.ref_name }}
-          VERSION=${VERSION#v}
-          echo "Setting app version to $VERSION"
-          
-          # Update Info.plist
-          plutil -replace CFBundleShortVersionString -string "$VERSION" Info.plist
-          plutil -replace CFBundleVersion -string "$VERSION" Info.plist
-
-      - name: Build App
-        run: |
-          chmod +x build.sh
-          ./build.sh
-
-      - name: Create ZIP
-        run: |
-          cd build
-          ditto -c -k --keepParent Transcriber.app Transcriber.zip
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
         with:
-          files: build/Transcriber.zip
-          draft: false
-          prerelease: false
+          name: mac-build
+          
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Transcriber.zip
+            Transcriber-Linux-x86_64.AppImage
           body: ${{ needs.generate-notes.outputs.release_notes }}
-          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

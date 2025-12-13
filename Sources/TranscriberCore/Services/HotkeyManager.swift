@@ -1,23 +1,38 @@
 import Foundation
+#if !os(Linux)
 import Carbon
+#endif
 
-class HotkeyManager {
-    var onHotkeyDown: (() -> Void)?
-    var onHotkeyUp: (() -> Void)?
+public class HotkeyManager {
+    public var onHotkeyDown: (() -> Void)?
+    public var onHotkeyUp: (() -> Void)?
     
+    #if !os(Linux)
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    #endif
     private var currentHotkey: KeyCombination?
     private var isHotkeyPressed = false
     private var pressedModifiers: UInt32 = 0
     private var pressedKeyCode: UInt32?
     
-    func register(keyCombination: KeyCombination) {
+    public init() {}
+    
+    public func register(keyCombination: KeyCombination) {
+        #if !os(Linux)
         currentHotkey = keyCombination
         setupEventTap()
+        #else
+        currentHotkey = keyCombination
+        // Linux global hotkeys require elevated permissions via evdev/uinput.
+        // Users should use the system tray menu to start/stop recording,
+        // or configure a system-level hotkey using their desktop environment.
+        print("ℹ️ Global hotkeys on Linux: Use the system tray menu or configure \(keyCombination.displayString) in your desktop environment settings.")
+        #endif
     }
     
-    func unregister() {
+    public func unregister() {
+        #if !os(Linux)
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
             runLoopSource = nil
@@ -27,12 +42,14 @@ class HotkeyManager {
             CGEvent.tapEnable(tap: tap, enable: false)
             eventTap = nil
         }
+        #endif
         
         isHotkeyPressed = false
         pressedModifiers = 0
         pressedKeyCode = nil
     }
     
+    #if !os(Linux)
     private func setupEventTap() {
         unregister()
         
@@ -140,6 +157,7 @@ class HotkeyManager {
         if flags.contains(.maskCommand) { result |= UInt32(cmdKey) }
         return result
     }
+    #endif
     
     deinit {
         unregister()
