@@ -41,7 +41,7 @@ building, favoring direct `swiftc` compilation via script.
 ## Continuous Integration & Deployment
 
 - **CI/CD**: GitHub Actions workflows in `.github/workflows/`.
-  - `release.yml`: Builds macOS (dmg/zip) and Linux (AppImage) artifacts.
+  - `release.yml`: Builds macOS (zip) and Linux (AppImage) artifacts.
 
 ## Linux Development (`TranscriberLinux`)
 
