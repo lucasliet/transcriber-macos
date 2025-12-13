@@ -1,4 +1,4 @@
-# Transcriber for macOS
+# Transcriber
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -53,7 +53,7 @@ your active application.
    [Releases](https://github.com/lucasliet/transcriber-macos/releases).
 2. Install dependencies (Ubuntu/Debian):
    ```bash
-   sudo apt install libgtk-3-0 xclip xdotool
+   sudo apt install libgtk-3-0 xclip xdotool alsa-utils libfuse2
    ```
 3. Make executable and run:
    ```bash
@@ -66,6 +66,8 @@ your active application.
 - **xclip**: For clipboard management.
 - **xdotool**: For simulating paste (Ctrl+V).
 - **libgtk-3**: Core UI library.
+- **alsa-utils**: For audio recording (`arecord`).
+- **libfuse2**: Required to run AppImages.
 - **Microphone**: Ensure input is configured in PulseAudio/PipeWire.
 
 ## Usage
