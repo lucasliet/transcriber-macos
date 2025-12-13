@@ -63,7 +63,11 @@ public class AudioRecorder: NSObject {
     
     public func startRecording() throws {
         let tempDir = FileManager.default.temporaryDirectory
+        #if os(Linux)
         let fileName = "transcriber_\(UUID().uuidString).wav"
+        #else
+        let fileName = "transcriber_\(UUID().uuidString).m4a"
+        #endif
         let fileURL = tempDir.appendingPathComponent(fileName)
         recordingURL = fileURL
         

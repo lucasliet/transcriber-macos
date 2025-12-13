@@ -2,6 +2,9 @@ import Foundation
 #if canImport(AppKit)
 import AppKit
 #endif
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public struct GitHubRelease: Codable {
     let tagName: String
@@ -56,7 +59,11 @@ public class UpdateManager: ObservableObject {
                 // 3. Compare Versions
                 if isNewerVersion(release.tagName) {
                     await MainActor.run {
+                        #if os(macOS)
                         self.promptUpdate(release: release)
+                        #else
+                        print("Nova versão disponível: \(release.tagName) — \(release.htmlUrl)")
+                        #endif
                     }
                 } else if isUserInitiated {
                      await MainActor.run {

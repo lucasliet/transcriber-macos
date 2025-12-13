@@ -60,7 +60,7 @@ public class AppState: ObservableObject {
         }
     }
     
-    func startRecording() {
+    public func startRecording() {
         guard !isRecording else {
             return 
         }
@@ -75,7 +75,7 @@ public class AppState: ObservableObject {
         }
     }
     
-    func stopRecordingAndTranscribe() async {
+    public func stopRecordingAndTranscribe() async {
         guard isRecording else {
             return 
         }
@@ -103,14 +103,14 @@ public class AppState: ObservableObject {
         }
     }
     
-    func updateHotkey(_ keyCombination: KeyCombination) {
+    public func updateHotkey(_ keyCombination: KeyCombination) {
         settingsManager.saveHotkey(keyCombination)
         hotkeyManager.unregister()
         hotkeyManager.register(keyCombination: keyCombination)
         hotkeyDisplay = keyCombination.displayString
     }
     
-    func checkUpdates() {
+    public func checkUpdates() {
         UpdateManager.shared.checkForUpdates(isUserInitiated: true)
     }
 }
