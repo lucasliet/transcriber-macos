@@ -36,7 +36,11 @@ guard let status = Application.run(startupHandler: { app in
     let recordItem = MenuItem(label: "Iniciar Gravação")
     recordItem.connect(signal: "activate") { 
         Task { @MainActor in
-            appState.startRecording()
+            if appState.isRecording {
+                await appState.stopRecordingAndTranscribe()
+            } else {
+                appState.startRecording()
+            }
         }
     }
     menu.append(recordItem)

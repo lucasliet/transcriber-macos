@@ -1,5 +1,7 @@
 import Foundation
+#if !os(Linux)
 import Carbon
+#endif
 
 public struct KeyCombination: Codable, Equatable {
     public let keyCode: UInt32
