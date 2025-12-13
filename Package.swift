@@ -5,7 +5,8 @@ let package = Package(
     name: "Transcriber",
     products: [
         .executable(name: "transcriber-linux", targets: ["TranscriberLinux"]),
-        .library(name: "TranscriberCore", targets: ["TranscriberCore"])
+        .library(name: "TranscriberCore", targets: ["TranscriberCore"]),
+        .executable(name: "transcriber-mac", targets: ["TranscriberMac"])
     ],
     dependencies: [
         // Note: gir2swift and SwiftGtk don't have stable releases yet.

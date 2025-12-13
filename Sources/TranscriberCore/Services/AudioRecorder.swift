@@ -26,8 +26,8 @@ public enum AudioRecorderError: Error, LocalizedError {
 public class AudioRecorder: NSObject {
     #if os(Linux)
     private var recordingProcess: Process?
-    #else
     private var audioRecorder: AVAudioRecorder?
+    private var recordingError: Error?
     #endif
     private var recordingURL: URL?
 
@@ -130,6 +130,11 @@ public class AudioRecorder: NSObject {
         recorder.stop()
         audioRecorder = nil
         
+        if let error = recordingError {
+            recordingError = nil
+            throw AudioRecorderError.recordingFailed(error.localizedDescription)
+        }
+        
         return url
         #endif
     }
@@ -143,17 +148,16 @@ public class AudioRecorder: NSObject {
     }
 }
 
-#if !os(Linux)
 extension AudioRecorder: AVAudioRecorderDelegate {
     public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         if !flag {
-            print("Recording finished unsuccessfully")
+            recordingError = AudioRecorderError.recordingFailed("Recording finished unsuccessfully")
         }
     }
     
     public func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         if let error = error {
-            print("Recording encode error: \(error.localizedDescription)")
+            recordingError = error
         }
     }
 }
