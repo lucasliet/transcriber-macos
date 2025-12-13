@@ -104,9 +104,19 @@ public class AudioRecorder: NSObject {
         guard let process = recordingProcess, let url = recordingURL else {
              throw AudioRecorderError.noRecordingInProgress
         }
-        process.terminate()
-        process.waitUntilExit()
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
         recordingProcess = nil
+        
+        guard FileManager.default.fileExists(atPath: url.path),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int64,
+              size > 44 else {
+            throw AudioRecorderError.recordingFailed("Invalid or empty WAV file")
+        }
+        
         return url
         #else
         guard let recorder = audioRecorder, let url = recordingURL else {

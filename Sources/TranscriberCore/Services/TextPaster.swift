@@ -46,6 +46,8 @@ public class TextPaster {
             }
             xclip.waitUntilExit()
             
+            usleep(50_000) // 50ms delay to ensure X11 clipboard sync
+            
             let xdotool = Process()
             xdotool.executableURL = xdotoolURL
             xdotool.arguments = ["key", "ctrl+v"]
