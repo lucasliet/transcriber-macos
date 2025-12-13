@@ -31,6 +31,22 @@ public class TextPaster {
             return
         }
         
+        var previousContents: String?
+        let readClipboard = Process()
+        readClipboard.executableURL = xclipURL
+        readClipboard.arguments = ["-selection", "clipboard", "-out"]
+        let outPipe = Pipe()
+        readClipboard.standardOutput = outPipe
+        readClipboard.standardError = FileHandle.nullDevice
+        do {
+            try readClipboard.run()
+            readClipboard.waitUntilExit()
+            if readClipboard.terminationStatus == 0 {
+                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+                previousContents = String(data: data, encoding: .utf8)
+            }
+        } catch {}
+        
         let xclip = Process()
         xclip.executableURL = xclipURL
         xclip.arguments = ["-selection", "clipboard", "-in"]
@@ -53,6 +69,21 @@ public class TextPaster {
             xdotool.arguments = ["key", "ctrl+v"]
             try xdotool.run()
             xdotool.waitUntilExit()
+            
+            if let previous = previousContents, !previous.isEmpty {
+                usleep(500_000) // 500ms delay before restoring
+                let restoreClip = Process()
+                restoreClip.executableURL = xclipURL
+                restoreClip.arguments = ["-selection", "clipboard", "-in"]
+                let restorePipe = Pipe()
+                restoreClip.standardInput = restorePipe
+                try restoreClip.run()
+                if let data = previous.data(using: .utf8) {
+                    try restorePipe.fileHandleForWriting.write(contentsOf: data)
+                    try restorePipe.fileHandleForWriting.close()
+                }
+                restoreClip.waitUntilExit()
+            }
             
         } catch {
             print("TextPaster Error: \(error)")
