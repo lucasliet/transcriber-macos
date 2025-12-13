@@ -35,7 +35,7 @@ guard let status = Application.run(startupHandler: { app in
     // Record Item
     let recordItem = MenuItem(label: "Iniciar Gravação")
     recordItem.connect(signal: "activate") { 
-        Task { @MainActor in
+        Task {
             if appState.isRecording {
                 await appState.stopRecordingAndTranscribe()
             } else {

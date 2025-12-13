@@ -41,7 +41,8 @@ public class AppState: ObservableObject {
         hotkeyManager.register(keyCombination: settingsManager.currentHotkey)
         
         // Auto Update Check (runs detached/background)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        Task {
+            try? await Task.sleep(nanoseconds: 1 * 1_000_000_000)
             UpdateManager.shared.checkForUpdates()
         }
     }
@@ -94,8 +95,9 @@ public class AppState: ObservableObject {
             
             try? FileManager.default.removeItem(at: audioURL)
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.statusMessage = "Pronto para gravar"
+            Task {
+                try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
+                self.statusMessage = "Pronto para gravar"
             }
         } catch {
             let errorMsg = "Erro: \(error.localizedDescription)"
