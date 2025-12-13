@@ -26,6 +26,7 @@ public enum AudioRecorderError: Error, LocalizedError {
 public class AudioRecorder: NSObject {
     #if os(Linux)
     private var recordingProcess: Process?
+    #else
     private var audioRecorder: AVAudioRecorder?
     private var recordingError: Error?
     #endif

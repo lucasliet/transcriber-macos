@@ -82,7 +82,7 @@ your active application.
 
 ### Configuring Hotkey
 
-- **macOS**: Right-click the menu bar icon → "Configurar Atalho" to change the
+- **macOS**: Right-click the menu bar icon → "Configure Hotkey" to change the
   hotkey
 - **Linux**: Global hotkeys are not yet implemented. Use the **system tray
   menu** to start/stop recording. Alternatively, configure `Ctrl+Alt+T` as a

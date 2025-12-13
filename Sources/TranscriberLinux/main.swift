@@ -5,17 +5,21 @@ import Foundation
 import OpenCombine
 
 class SubscriptionHolder {
+    var appState: AppState!
     static let shared = SubscriptionHolder()
     var subscriptions = Set<AnyCancellable>()
     private init() {}
 }
+
+private var _appState: AppState?
 
 // Initialize GTK
 guard let status = Application.run(startupHandler: { app in
     print("Transcriber for Linux started")
     
     // Initialize Core State
-    let appState = AppState()
+    _appState = AppState()
+    guard let appState = _appState else { return }
     
     // Create Status Icon (System Tray)
     let iconPath = "transcriber.png" 
