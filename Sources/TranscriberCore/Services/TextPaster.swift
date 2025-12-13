@@ -6,19 +6,6 @@ import Carbon
 
 public class TextPaster {
     public init() {}
-    
-    #if os(Linux)
-    private func findExecutable(_ name: String) -> URL? {
-        let paths = ["/usr/bin", "/usr/local/bin", "/bin"]
-        for path in paths {
-            let url = URL(fileURLWithPath: path).appendingPathComponent(name)
-            if FileManager.default.isExecutableFile(atPath: url.path) {
-                return url
-            }
-        }
-        return nil
-    }
-    #endif
 
     public func pasteText(_ text: String) {
         #if os(Linux)
