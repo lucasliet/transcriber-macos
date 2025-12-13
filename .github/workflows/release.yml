@@ -95,17 +95,14 @@ jobs:
       - name: Build and Archive
         run: |
           ./build.sh
-          
           # Create Zip from build output
           cd build && zip -r ../Transcriber.zip Transcriber.app
           
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: Transcriber.zip
-          body: ${{ needs.generate-notes.outputs.release_notes }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: mac-build
+          path: Transcriber.zip
 
   build-linux:
     name: Build Linux
@@ -180,10 +177,35 @@ jobs:
           fi
           mv "$APPIMAGE" Transcriber-Linux-x86_64.AppImage
 
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: Transcriber-Linux-x86_64.AppImage
+
+  publish-release:
+    name: Publish Release
+    needs: [generate-notes, build-mac, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-build
+          
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Transcriber-Linux-x86_64.AppImage
+          files: |
+            Transcriber.zip
+            Transcriber-Linux-x86_64.AppImage
           body: ${{ needs.generate-notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

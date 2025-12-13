@@ -45,7 +45,9 @@ public class TextPaster {
                 let data = outPipe.fileHandleForReading.readDataToEndOfFile()
                 previousContents = String(data: data, encoding: .utf8)
             }
-        } catch {}
+        } catch {
+            print("TextPaster Warning: Could not read previous clipboard: \(error)")
+        }
         
         let xclip = Process()
         xclip.executableURL = xclipURL

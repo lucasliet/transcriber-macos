@@ -10,9 +10,7 @@ import OpenCombineFoundation
 import SwiftUI
 #endif
 
-#if os(macOS)
 @MainActor
-#endif
 public class AppState: ObservableObject {
     @Published public var isRecording = false
     @Published public var statusMessage = "Pronto para gravar"
