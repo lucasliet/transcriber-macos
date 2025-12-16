@@ -1,4 +1,4 @@
-# Transcriber for macOS
+# Transcriber
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -39,14 +39,59 @@ your active application.
 
 3. The application will be located at `build/Transcriber.app`.
 
-### Running
+### macOS
 
-1. Double-click `Transcriber.app` in the `build` folder.
-2. **Permissions:**
-   - **Accessibility:** Grant permission when prompted (or go to System Settings
-     > Privacy & Security > Accessibility). Any issue, check
-     > `~/Documents/Transcriber.log`.
-   - **Microphone:** Grant permission when prompted.
+1. Download the latest `Transcriber.zip` from
+   [Releases](https://github.com/lucasliet/transcriber-macos/releases).
+2. Unzip and move `Transcriber.app` to your Applications folder.
+3. Open the app. You may need to allow it in System Settings > Privacy &
+   Security > Accessibility (for pasting text) and Microphone.
+
+### Linux
+
+1. Download the latest `Transcriber-Linux-x86_64.AppImage` from
+   [Releases](https://github.com/lucasliet/transcriber-macos/releases).
+2. Install dependencies (Ubuntu/Debian):
+   ```bash
+   sudo apt install libgtk-3-0 xclip xdotool alsa-utils libfuse2
+   ```
+3. Make executable and run:
+   ```bash
+   chmod +x Transcriber-Linux-x86_64.AppImage
+   ./Transcriber-Linux-x86_64.AppImage
+   ```
+
+## Requirements (Linux)
+
+- **xclip**: For clipboard management.
+- **xdotool**: For simulating paste (Ctrl+V).
+- **libgtk-3**: Core UI library.
+- **alsa-utils**: For audio recording (`arecord`).
+- **libfuse2**: Required to run AppImages.
+- **Microphone**: Ensure input is configured in PulseAudio/PipeWire.
+
+## Usage
+
+### Recording
+
+1. **Press the hotkey** (`⌥⌘T` on macOS, `Ctrl+Alt+T` on Linux) to start
+   recording
+2. **Speak** your message clearly
+3. **Release the hotkey** to stop recording and auto-transcribe
+4. The transcribed text is **automatically pasted** at your cursor position
+
+### Configuring Hotkey
+
+- **macOS**: Right-click the menu bar icon → "Configure Hotkey" to change the
+  hotkey
+- **Linux**: Global hotkeys are not yet implemented. Use the **system tray
+  menu** to start/stop recording. Alternatively, configure `Ctrl+Alt+T` as a
+  custom shortcut in your desktop environment to launch the recording action.
+
+### API
+
+Transcriber uses ElevenLabs' free speech-to-text API. No API key required for
+basic usage.
 
 ## Development
 

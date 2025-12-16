@@ -1,22 +1,31 @@
-import SwiftUI
+import Foundation
+#if canImport(Combine)
 import Combine
+#else
+import OpenCombine
+import OpenCombineDispatch
+import OpenCombineFoundation
+#endif
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 
 @MainActor
-class AppState: ObservableObject {
-    @Published var isRecording = false
-    @Published var statusMessage = "Pronto para gravar"
-    @Published var showingHotkeySettings = false
-    @Published var hotkeyDisplay: String = ""
+public class AppState: ObservableObject {
+    @Published public var isRecording = false
+    @Published public var statusMessage = "Pronto para gravar"
+    @Published public var showingHotkeySettings = false
+    @Published public var hotkeyDisplay: String = ""
     
     let hotkeyManager: HotkeyManager
     let audioRecorder: AudioRecorder
     let transcriptionService: TranscriptionService
     let textPaster: TextPaster
-    let settingsManager: SettingsManager
+    public let settingsManager: SettingsManager
     
     private var cancellables = Set<AnyCancellable>()
     
-    init() {
+    public init() {
         self.settingsManager = SettingsManager()
         self.hotkeyManager = HotkeyManager()
         self.audioRecorder = AudioRecorder()
@@ -30,7 +39,8 @@ class AppState: ObservableObject {
         hotkeyManager.register(keyCombination: settingsManager.currentHotkey)
         
         // Auto Update Check (runs detached/background)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        Task {
+            try? await Task.sleep(nanoseconds: 1 * 1_000_000_000)
             UpdateManager.shared.checkForUpdates()
         }
     }
@@ -49,7 +59,7 @@ class AppState: ObservableObject {
         }
     }
     
-    func startRecording() {
+    public func startRecording() {
         guard !isRecording else {
             return 
         }
@@ -64,7 +74,7 @@ class AppState: ObservableObject {
         }
     }
     
-    func stopRecordingAndTranscribe() async {
+    public func stopRecordingAndTranscribe() async {
         guard isRecording else {
             return 
         }
@@ -83,8 +93,9 @@ class AppState: ObservableObject {
             
             try? FileManager.default.removeItem(at: audioURL)
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.statusMessage = "Pronto para gravar"
+            Task {
+                try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
+                self.statusMessage = "Pronto para gravar"
             }
         } catch {
             let errorMsg = "Erro: \(error.localizedDescription)"
@@ -92,14 +103,14 @@ class AppState: ObservableObject {
         }
     }
     
-    func updateHotkey(_ keyCombination: KeyCombination) {
+    public func updateHotkey(_ keyCombination: KeyCombination) {
         settingsManager.saveHotkey(keyCombination)
         hotkeyManager.unregister()
         hotkeyManager.register(keyCombination: keyCombination)
         hotkeyDisplay = keyCombination.displayString
     }
     
-    func checkUpdates() {
+    public func checkUpdates() {
         UpdateManager.shared.checkForUpdates(isUserInitiated: true)
     }
 }

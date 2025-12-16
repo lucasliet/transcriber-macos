@@ -1,16 +1,39 @@
 import Foundation
+#if !os(Linux)
 import Carbon
+#endif
 
-struct KeyCombination: Codable, Equatable {
-    let keyCode: UInt32
-    let modifiers: UInt32
+public struct KeyCombination: Codable, Equatable {
+    public let keyCode: UInt32
+    public let modifiers: UInt32
+
+    public init(keyCode: UInt32, modifiers: UInt32) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
     
-    static let defaultHotkey = KeyCombination(
+    #if os(Linux)
+    public static let defaultHotkey = KeyCombination(
+        keyCode: 20,
+        modifiers: 12
+    )
+    #else
+    public static let defaultHotkey = KeyCombination(
         keyCode: UInt32(kVK_ANSI_T),
         modifiers: UInt32(optionKey | cmdKey)
     )
+    #endif
     
-    var displayString: String {
+    public var displayString: String {
+        #if os(Linux)
+        var parts: [String] = []
+        if modifiers & 4 != 0 { parts.append("Ctrl") }
+        if modifiers & 8 != 0 { parts.append("Alt") }
+        if modifiers & 1 != 0 { parts.append("Shift") }
+        if modifiers & 64 != 0 { parts.append("Super") }
+        parts.append(linuxKeyCodeToString(keyCode))
+        return parts.joined(separator: "+")
+        #else
         var parts: [String] = []
         
         if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
@@ -21,7 +44,23 @@ struct KeyCombination: Codable, Equatable {
         parts.append(keyCodeToString(keyCode))
         
         return parts.joined()
+        #endif
     }
+    
+    #if os(Linux)
+    private func linuxKeyCodeToString(_ keyCode: UInt32) -> String {
+        let keyMap: [UInt32: String] = [
+            16: "Q", 17: "W", 18: "E", 19: "R", 20: "T", 21: "Y", 22: "U", 23: "I", 24: "O", 25: "P",
+            30: "A", 31: "S", 32: "D", 33: "F", 34: "G", 35: "H", 36: "J", 37: "K", 38: "L",
+            44: "Z", 45: "X", 46: "C", 47: "V", 48: "B", 49: "N", 50: "M",
+            2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8", 10: "9", 11: "0",
+            59: "F1", 60: "F2", 61: "F3", 62: "F4", 63: "F5", 64: "F6",
+            65: "F7", 66: "F8", 67: "F9", 68: "F10", 87: "F11", 88: "F12",
+            57: "Space", 28: "Enter"
+        ]
+        return keyMap[keyCode] ?? "Key\(keyCode)"
+    }
+    #endif
     
     private func keyCodeToString(_ keyCode: UInt32) -> String {
         let keyMap: [UInt32: String] = [

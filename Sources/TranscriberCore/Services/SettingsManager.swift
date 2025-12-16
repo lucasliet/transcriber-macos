@@ -1,20 +1,21 @@
 import Foundation
 
-class SettingsManager {
+public class SettingsManager {
+    public init() {}
     private let hotkeyKey = "savedHotkey"
     private let defaults = UserDefaults.standard
     
-    var currentHotkey: KeyCombination {
+    public var currentHotkey: KeyCombination {
         loadHotkey() ?? KeyCombination.defaultHotkey
     }
     
-    func saveHotkey(_ hotkey: KeyCombination) {
+    public func saveHotkey(_ hotkey: KeyCombination) {
         if let encoded = try? JSONEncoder().encode(hotkey) {
             defaults.set(encoded, forKey: hotkeyKey)
         }
     }
     
-    func loadHotkey() -> KeyCombination? {
+    public func loadHotkey() -> KeyCombination? {
         guard let data = defaults.data(forKey: hotkeyKey),
               let hotkey = try? JSONDecoder().decode(KeyCombination.self, from: data) else {
             return nil
@@ -22,7 +23,7 @@ class SettingsManager {
         return hotkey
     }
     
-    func resetToDefault() {
+    public func resetToDefault() {
         defaults.removeObject(forKey: hotkeyKey)
     }
 }
