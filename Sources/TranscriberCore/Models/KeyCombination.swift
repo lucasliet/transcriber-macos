@@ -14,8 +14,8 @@ public struct KeyCombination: Codable, Equatable {
     
     #if os(Linux)
     public static let defaultHotkey = KeyCombination(
-        keyCode: 20,  // KEY_T in evdev (input-event-codes.h)
-        modifiers: 12 // Ctrl (4) + Alt (8)
+        keyCode: 20,
+        modifiers: 12
     )
     #else
     public static let defaultHotkey = KeyCombination(
@@ -27,7 +27,6 @@ public struct KeyCombination: Codable, Equatable {
     public var displayString: String {
         #if os(Linux)
         var parts: [String] = []
-        // Linux modifier flags: Ctrl=4, Alt=8, Shift=1, Super=64
         if modifiers & 4 != 0 { parts.append("Ctrl") }
         if modifiers & 8 != 0 { parts.append("Alt") }
         if modifiers & 1 != 0 { parts.append("Shift") }
@@ -50,7 +49,6 @@ public struct KeyCombination: Codable, Equatable {
     
     #if os(Linux)
     private func linuxKeyCodeToString(_ keyCode: UInt32) -> String {
-        // evdev key codes for common keys
         let keyMap: [UInt32: String] = [
             16: "Q", 17: "W", 18: "E", 19: "R", 20: "T", 21: "Y", 22: "U", 23: "I", 24: "O", 25: "P",
             30: "A", 31: "S", 32: "D", 33: "F", 34: "G", 35: "H", 36: "J", 37: "K", 38: "L",

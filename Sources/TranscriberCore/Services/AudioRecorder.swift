@@ -136,6 +136,7 @@ public class AudioRecorder: NSObject {
     }
 }
 
+#if !os(Linux)
 extension AudioRecorder: AVAudioRecorderDelegate {
     public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         if !flag {

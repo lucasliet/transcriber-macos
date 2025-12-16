@@ -51,7 +51,7 @@ public class TextPaster {
             }
             xclip.waitUntilExit()
             
-            Thread.sleep(forTimeInterval: 0.05) // 50ms delay to ensure X11 clipboard sync
+            Thread.sleep(forTimeInterval: 0.05)
             
             let xdotool = Process()
             xdotool.executableURL = xdotoolURL
@@ -60,7 +60,7 @@ public class TextPaster {
             xdotool.waitUntilExit()
             
             if let previous = previousContents, !previous.isEmpty {
-                Thread.sleep(forTimeInterval: 0.5) // 500ms delay before restoring
+                Thread.sleep(forTimeInterval: 0.5)
                 let restoreClip = Process()
                 restoreClip.executableURL = xclipURL
                 restoreClip.arguments = ["-selection", "clipboard", "-in"]
