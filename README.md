@@ -37,6 +37,11 @@ your active application.
    ./build.sh
    ```
 
+   For development with logging enabled:
+   ```bash
+   ./build.sh --debug
+   ```
+
 3. The application will be located at `build/Transcriber.app`.
 
 ### Running
@@ -44,9 +49,17 @@ your active application.
 1. Double-click `Transcriber.app` in the `build` folder.
 2. **Permissions:**
    - **Accessibility:** Grant permission when prompted (or go to System Settings
-     > Privacy & Security > Accessibility). For troubleshooting, check the logs
-     at `~/Library/Application Support/Transcriber/Logs/`.
+     > Privacy & Security > Accessibility).
    - **Microphone:** Grant permission when prompted.
+
+### Troubleshooting
+
+For debugging issues, build with the `--debug` flag to enable logging:
+```bash
+./build.sh --debug
+```
+
+Logs will be written to `~/Library/Application Support/Transcriber/Logs/`.
 
 ## Development
 

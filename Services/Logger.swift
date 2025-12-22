@@ -8,6 +8,7 @@ enum LogLevel: String {
 }
 
 class Logger {
+    #if DEBUG_LOGGING
     static let shared = Logger()
 
     private let logFileURL: URL
@@ -71,9 +72,7 @@ class Logger {
             self.fileHandle?.write(data)
         }
 
-        #if DEBUG
         print(logMessage, terminator: "")
-        #endif
     }
 
     static func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
@@ -95,4 +94,11 @@ class Logger {
     static func logFilePath() -> String {
         return shared.logFileURL.path
     }
+    #else
+    static func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
+    static func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
+    static func warning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
+    static func error(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
+    static func logFilePath() -> String { return "" }
+    #endif
 }

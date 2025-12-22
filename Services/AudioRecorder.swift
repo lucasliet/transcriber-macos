@@ -28,9 +28,12 @@ class AudioRecorder: NSObject {
     }
     
     private func requestMicrophonePermission() {
+        Logger.info("Requesting microphone permission...")
         AVCaptureDevice.requestAccess(for: .audio) { granted in
-            if !granted {
-                Logger.warning("Microphone permission denied")
+            if granted {
+                Logger.info("Microphone permission GRANTED")
+            } else {
+                Logger.warning("Microphone permission DENIED")
             }
         }
     }
@@ -40,7 +43,7 @@ class AudioRecorder: NSObject {
         let fileName = "transcriber_\(UUID().uuidString).m4a"
         let fileURL = tempDir.appendingPathComponent(fileName)
         recordingURL = fileURL
-        
+
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 44100.0,

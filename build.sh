@@ -7,7 +7,13 @@ BUILD_DIR="$PROJECT_DIR/build"
 APP_NAME="Transcriber"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
-echo "🔨 Building $APP_NAME..."
+DEBUG_MODE=false
+if [[ "$1" == "--debug" ]]; then
+    DEBUG_MODE=true
+    echo "🔨 Building $APP_NAME (DEBUG MODE - logging enabled)..."
+else
+    echo "🔨 Building $APP_NAME..."
+fi
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -29,6 +35,11 @@ SOURCES=(
     "$PROJECT_DIR/Services/UpdateManager.swift"
 )
 
+SWIFT_FLAGS=()
+if [ "$DEBUG_MODE" = true ]; then
+    SWIFT_FLAGS+=(-D DEBUG_LOGGING)
+fi
+
 echo "📦 Compiling Swift sources..."
 swiftc \
     -o "$APP_BUNDLE/Contents/MacOS/$APP_NAME" \
@@ -40,6 +51,7 @@ swiftc \
     -framework Carbon \
     -framework ApplicationServices \
     -parse-as-library \
+    "${SWIFT_FLAGS[@]}" \
     "${SOURCES[@]}"
 
 cp "$PROJECT_DIR/Info.plist" "$APP_BUNDLE/Contents/"

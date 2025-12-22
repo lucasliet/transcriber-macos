@@ -76,9 +76,11 @@ class TranscriptionService {
                 throw TranscriptionError.apiError("Status \(httpResponse.statusCode): \(errorMessage)")
             }
 
+            let responseString = String(data: data, encoding: .utf8) ?? "(binary data)"
+            Logger.debug("TranscriptionService: Raw JSON response: \(responseString)")
+
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let text = json["text"] as? String else {
-                let responseString = String(data: data, encoding: .utf8) ?? "(binary data)"
                 Logger.error("TranscriptionService: Invalid JSON response: \(responseString)")
                 throw TranscriptionError.invalidResponse
             }
