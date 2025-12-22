@@ -20,6 +20,7 @@ SOURCES=(
     "$PROJECT_DIR/Models/KeyCombination.swift"
     "$PROJECT_DIR/Views/ContentMenu.swift"
     "$PROJECT_DIR/Views/HotkeySettingsView.swift"
+    "$PROJECT_DIR/Services/Logger.swift"
     "$PROJECT_DIR/Services/HotkeyManager.swift"
     "$PROJECT_DIR/Services/AudioRecorder.swift"
     "$PROJECT_DIR/Services/TranscriptionService.swift"

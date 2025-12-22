@@ -38,7 +38,7 @@ class UpdateManager: ObservableObject {
         if !isUserInitiated {
             let lastCheck = UserDefaults.standard.object(forKey: defaultsKeyLastCheck) as? Date ?? Date.distantPast
             if Calendar.current.isDateInToday(lastCheck) {
-                print("UpdateManager: Already checked today. Skipping.")
+                Logger.info("UpdateManager: Already checked today. Skipping.")
                 return
             }
         }
@@ -71,7 +71,7 @@ class UpdateManager: ObservableObject {
                 }
                 
             } catch {
-                print("UpdateManager: Check failed: \(error)")
+                Logger.error("UpdateManager: Check failed: \(error)")
                 if isUserInitiated {
                     await MainActor.run {
                         let alert = NSAlert()
@@ -111,11 +111,11 @@ class UpdateManager: ObservableObject {
     
     private func downloadAndInstall(release: GitHubRelease) {
         guard let asset = release.assets.first(where: { $0.name.hasSuffix(".zip") }) else {
-            print("UpdateManager: No zip asset found.")
+            Logger.warning("UpdateManager: No zip asset found.")
             return
         }
-        
-        print("UpdateManager: Downloading \(asset.browserDownloadUrl)...")
+
+        Logger.info("UpdateManager: Downloading \(asset.browserDownloadUrl)...")
         
         guard let downloadUrl = URL(string: asset.browserDownloadUrl) else { return }
         
@@ -124,7 +124,7 @@ class UpdateManager: ObservableObject {
                 let (tempLocalUrl, _) = try await URLSession.shared.download(from: downloadUrl)
                 try installUpdate(from: tempLocalUrl)
             } catch {
-                print("UpdateManager: Download failed: \(error)")
+                Logger.error("UpdateManager: Download failed: \(error)")
                 await MainActor.run {
                     let alert = NSAlert()
                     alert.messageText = "Update Failed"
@@ -193,8 +193,8 @@ class UpdateManager: ObservableObject {
         
         try scriptContent.write(to: scriptPath, atomically: true, encoding: .utf8)
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
-        
-        print("UpdateManager: Launching install script: \(scriptPath.path)")
+
+        Logger.info("UpdateManager: Launching install script: \(scriptPath.path)")
         
         // 4. Run Script and Exit
         let installProcess = Process()

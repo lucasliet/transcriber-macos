@@ -44,8 +44,8 @@ your active application.
 1. Double-click `Transcriber.app` in the `build` folder.
 2. **Permissions:**
    - **Accessibility:** Grant permission when prompted (or go to System Settings
-     > Privacy & Security > Accessibility). Any issue, check
-     > `~/Documents/Transcriber.log`.
+     > Privacy & Security > Accessibility). For troubleshooting, check the logs
+     at `~/Library/Application Support/Transcriber/Logs/`.
    - **Microphone:** Grant permission when prompted.
 
 ## Development

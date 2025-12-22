@@ -51,43 +51,62 @@ class AppState: ObservableObject {
     
     func startRecording() {
         guard !isRecording else {
-            return 
+            Logger.warning("startRecording called but already recording")
+            return
         }
-        
+
+        Logger.info("Starting recording...")
+        isRecording = true
+        statusMessage = "Gravando..."
+
         do {
             try audioRecorder.startRecording()
-            isRecording = true
-            statusMessage = "Gravando..."
+            Logger.info("Recording started successfully")
         } catch {
-            let errorMsg = "Erro ao iniciar gravação: \(error.localizedDescription)"
-            statusMessage = errorMsg
+            Logger.error("Failed to start recording: \(error.localizedDescription)")
+            isRecording = false
+            statusMessage = "Erro: \(error.localizedDescription)"
         }
     }
     
     func stopRecordingAndTranscribe() async {
         guard isRecording else {
-            return 
+            Logger.warning("stopRecordingAndTranscribe called but not recording")
+            return
         }
-        
+
         isRecording = false
         statusMessage = "Transcrevendo..."
-        
+        Logger.info("Starting transcription flow")
+
         do {
+            Logger.debug("Stopping audio recording...")
             let audioURL = try audioRecorder.stopRecording()
+            Logger.info("Recording stopped successfully at: \(audioURL.path)")
+
+            Logger.debug("Loading audio data...")
             let audioData = try Data(contentsOf: audioURL)
-            
+            Logger.info("Audio data loaded: \(audioData.count) bytes")
+
+            Logger.debug("Calling transcription service...")
             let transcribedText = try await transcriptionService.transcribe(audioData: audioData)
-            
+            Logger.info("Transcription completed: \(transcribedText.count) characters")
+
+            Logger.debug("Calling text paster...")
             textPaster.pasteText(transcribedText)
+            Logger.info("Text paste completed")
+
             statusMessage = "Texto colado!"
-            
+
             try? FileManager.default.removeItem(at: audioURL)
-            
+            Logger.debug("Temporary audio file cleaned up")
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 self?.statusMessage = "Pronto para gravar"
             }
         } catch {
             let errorMsg = "Erro: \(error.localizedDescription)"
+            Logger.error("Transcription flow failed: \(error.localizedDescription)")
             statusMessage = errorMsg
         }
     }

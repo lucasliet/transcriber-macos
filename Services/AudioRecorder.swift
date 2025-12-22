@@ -30,7 +30,7 @@ class AudioRecorder: NSObject {
     private func requestMicrophonePermission() {
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             if !granted {
-                print("Microphone permission denied")
+                Logger.warning("Microphone permission denied")
             }
         }
     }
@@ -79,13 +79,13 @@ class AudioRecorder: NSObject {
 extension AudioRecorder: AVAudioRecorderDelegate {
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         if !flag {
-            print("Recording finished unsuccessfully")
+            Logger.error("Recording finished unsuccessfully")
         }
     }
-    
+
     func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         if let error = error {
-            print("Recording encode error: \(error.localizedDescription)")
+            Logger.error("Recording encode error: \(error.localizedDescription)")
         }
     }
 }

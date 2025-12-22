@@ -41,7 +41,7 @@ class HotkeyManager {
         let isTrusted = AXIsProcessTrustedWithOptions(options)
         
         if !isTrusted {
-            print("⚠️ Accessibility permissions missing!")
+            Logger.warning("Accessibility permissions missing!")
             return
         }
         
@@ -63,7 +63,7 @@ class HotkeyManager {
             callback: callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            print("❌ Failed to create event tap")
+            Logger.error("Failed to create event tap")
             return
         }
         
