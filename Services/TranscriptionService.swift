@@ -19,7 +19,7 @@ enum TranscriptionError: Error, LocalizedError {
 
 class TranscriptionService {
     // private let apiURL = "https://api.elevenlabs.io/v1/speech-to-text?allow_unauthenticated=1"
-    private let apiURL = "https://elevenlabs-transcribe.deno.dev/transcribe"
+    private let apiURL = "https://elevenlabs-transcribe.lucasliet.deno.net/transcribe"
     
     func transcribe(audioData: Data) async throws -> String {
         Logger.info("TranscriptionService: Starting transcription (\(audioData.count) bytes)")
