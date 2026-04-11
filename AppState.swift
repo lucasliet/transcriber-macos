@@ -7,6 +7,7 @@ class AppState: ObservableObject {
     @Published var statusMessage = "Pronto para gravar"
     @Published var showingHotkeySettings = false
     @Published var hotkeyDisplay: String = ""
+    @Published var transcriptionModeDisplayName: String = ""
     
     let hotkeyManager: HotkeyManager
     let audioRecorder: AudioRecorder
@@ -24,12 +25,18 @@ class AppState: ObservableObject {
         self.textPaster = TextPaster()
         
         self.hotkeyDisplay = settingsManager.currentHotkey.displayString
-        
+        self.transcriptionModeDisplayName = settingsManager.transcriptionMode.displayName
         
         setupHotkeyCallbacks()
         hotkeyManager.register(keyCombination: settingsManager.currentHotkey)
         
-        // Auto Update Check (runs detached/background)
+        settingsManager.$transcriptionMode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] mode in
+                self?.transcriptionModeDisplayName = mode.displayName
+            }
+            .store(in: &cancellables)
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             UpdateManager.shared.checkForUpdates()
         }
@@ -88,8 +95,12 @@ class AppState: ObservableObject {
             let audioData = try Data(contentsOf: audioURL)
             Logger.info("Audio data loaded: \(audioData.count) bytes")
 
-            Logger.debug("Calling transcription service...")
-            let transcribedText = try await transcriptionService.transcribe(audioData: audioData)
+            Logger.debug("Calling transcription service with mode: \(settingsManager.transcriptionMode.rawValue)...")
+            let transcribedText = try await transcriptionService.transcribe(
+                audioData: audioData,
+                audioURL: audioURL,
+                mode: settingsManager.transcriptionMode
+            )
             Logger.info("Transcription completed: \(transcribedText.count) characters")
 
             Logger.debug("Calling text paster...")

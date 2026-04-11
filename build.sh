@@ -7,13 +7,7 @@ BUILD_DIR="$PROJECT_DIR/build"
 APP_NAME="Transcriber"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
-DEBUG_MODE=false
-if [[ "$1" == "--debug" ]]; then
-    DEBUG_MODE=true
-    echo "🔨 Building $APP_NAME (DEBUG MODE - logging enabled)..."
-else
-    echo "🔨 Building $APP_NAME..."
-fi
+echo "🔨 Building $APP_NAME..."
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -26,19 +20,16 @@ SOURCES=(
     "$PROJECT_DIR/Models/KeyCombination.swift"
     "$PROJECT_DIR/Views/ContentMenu.swift"
     "$PROJECT_DIR/Views/HotkeySettingsView.swift"
+    "$PROJECT_DIR/Views/TranscriptionModeSettingsView.swift"
     "$PROJECT_DIR/Services/Logger.swift"
     "$PROJECT_DIR/Services/HotkeyManager.swift"
     "$PROJECT_DIR/Services/AudioRecorder.swift"
     "$PROJECT_DIR/Services/TranscriptionService.swift"
+    "$PROJECT_DIR/Services/LocalTranscriptionService.swift"
     "$PROJECT_DIR/Services/TextPaster.swift"
     "$PROJECT_DIR/Services/SettingsManager.swift"
     "$PROJECT_DIR/Services/UpdateManager.swift"
 )
-
-SWIFT_FLAGS=()
-if [ "$DEBUG_MODE" = true ]; then
-    SWIFT_FLAGS+=(-D DEBUG_LOGGING)
-fi
 
 echo "📦 Compiling Swift sources..."
 swiftc \
@@ -50,8 +41,8 @@ swiftc \
     -framework AVFoundation \
     -framework Carbon \
     -framework ApplicationServices \
+    -framework Speech \
     -parse-as-library \
-    "${SWIFT_FLAGS[@]}" \
     "${SOURCES[@]}"
 
 cp "$PROJECT_DIR/Info.plist" "$APP_BUNDLE/Contents/"

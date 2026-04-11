@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentMenu: View {
     @EnvironmentObject var appState: AppState
     @State private var hotkeyWindow: NSWindow?
+    @State private var modeWindow: NSWindow?
     
     var body: some View {
         VStack {
@@ -15,9 +16,13 @@ struct ContentMenu: View {
                 openHotkeySettings()
             }
             
+            Button("Transcrição: \(appState.transcriptionModeDisplayName)") {
+                openTranscriptionModeSettings()
+            }
+            
             Divider()
             
-            Button("Check for Updates...") {
+            Button("Verificar Atualizações...") {
                 appState.checkUpdates()
             }
             
@@ -54,6 +59,29 @@ struct ContentMenu: View {
         }
         
         hotkeyWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func openTranscriptionModeSettings() {
+        if modeWindow == nil {
+            let settingsView = TranscriptionModeSettingsView(settingsManager: appState.settingsManager) {
+                modeWindow?.close()
+                modeWindow = nil
+            }
+
+            let hostingController = NSHostingController(rootView: settingsView)
+
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "Modo de Transcrição"
+            window.styleMask = [.titled, .closable]
+            window.setContentSize(NSSize(width: 420, height: 280))
+            window.center()
+            window.level = .floating
+
+            modeWindow = window
+        }
+
+        modeWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 }

@@ -10,9 +10,10 @@ building, favoring direct `swiftc` compilation via script.
   (legacy/reference).
 - **Models/**: Data models and structs (e.g., `KeyCombination.swift`).
 - **Views/**: SwiftUI views for the interface (`ContentMenu.swift`,
-  `HotkeySettingsView.swift`).
-- **Services/**: Logic logic and service layers (`AudioRecorder.swift`,
-  `TranscriptionService.swift`, `HotkeyManager.swift`).
+  `HotkeySettingsView.swift`, `TranscriptionModeSettingsView.swift`).
+- **Services/**: Service layers (`AudioRecorder.swift`,
+  `TranscriptionService.swift`, `LocalTranscriptionService.swift`,
+  `HotkeyManager.swift`, `Logger.swift`, `SettingsManager.swift`).
 - **Media/**: Application assets (`AppIcon.icns`, source PNGs).
 
 ## Build, Test, and Development Commands
@@ -20,6 +21,7 @@ building, favoring direct `swiftc` compilation via script.
 - `./build.sh`: Compiles the Swift sources, handles resource copying
   (Info.plist, Icons), signs the application with ad-hoc signature, and places
   the result in `build/Transcriber.app`.
+- **Logs**: Written to `/tmp/transcriber.log` (capped at 50 lines, always on).
 
 ## Coding Style & Naming Conventions
 

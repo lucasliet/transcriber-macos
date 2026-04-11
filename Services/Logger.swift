@@ -8,58 +8,22 @@ enum LogLevel: String {
 }
 
 class Logger {
-    #if DEBUG_LOGGING
     static let shared = Logger()
 
     private let logFileURL: URL
-    private let fileHandle: FileHandle?
     private let dateFormatter: DateFormatter
     private let queue = DispatchQueue(label: "com.transcriber.logger", qos: .utility)
+    private let maxLines = 50
 
     private init() {
-        let fileManager = FileManager.default
-        let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let transcriberDir = appSupportURL.appendingPathComponent("Transcriber")
-        let logsDir = transcriberDir.appendingPathComponent("Logs")
+        logFileURL = URL(fileURLWithPath: "/tmp/transcriber.log")
 
-        try? fileManager.createDirectory(at: logsDir, withIntermediateDirectories: true)
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        let todayString = dateFormatter.string(from: Date())
-
-        logFileURL = logsDir.appendingPathComponent("transcriber-\(todayString).log")
-
-        if !fileManager.fileExists(atPath: logFileURL.path) {
-            fileManager.createFile(atPath: logFileURL.path, contents: nil)
+        if !FileManager.default.fileExists(atPath: logFileURL.path) {
+            FileManager.default.createFile(atPath: logFileURL.path, contents: nil)
         }
 
-        fileHandle = try? FileHandle(forWritingTo: logFileURL)
-        fileHandle?.seekToEndOfFile()
-
-        self.dateFormatter = DateFormatter()
-        self.dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-
-        cleanOldLogs(in: logsDir, olderThanDays: 7)
-    }
-
-    deinit {
-        try? fileHandle?.close()
-    }
-
-    private func cleanOldLogs(in directory: URL, olderThanDays days: Int) {
-        let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.creationDateKey]) else { return }
-
-        let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
-
-        for file in files where file.pathExtension == "log" {
-            if let attributes = try? fileManager.attributesOfItem(atPath: file.path),
-               let creationDate = attributes[.creationDate] as? Date,
-               creationDate < cutoffDate {
-                try? fileManager.removeItem(at: file)
-            }
-        }
+        dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
     }
 
     private func log(_ level: LogLevel, _ message: String, file: String = #file, function: String = #function, line: Int = #line) {
@@ -69,10 +33,26 @@ class Logger {
 
         queue.async { [weak self] in
             guard let self = self, let data = logMessage.data(using: .utf8) else { return }
-            self.fileHandle?.write(data)
+            self.appendAndTrim(data)
+        }
+    }
+
+    private func appendAndTrim(_ data: Data) {
+        guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else {
+            try? data.write(to: logFileURL)
+            return
         }
 
-        print(logMessage, terminator: "")
+        var lines = content.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        lines.append(String(data: data, encoding: .utf8)?.trimmingCharacters(in: .newlines) ?? "")
+
+        if lines.count > maxLines {
+            lines = Array(lines.suffix(maxLines))
+        }
+
+        let trimmed = lines.joined(separator: "\n") + "\n"
+        try? trimmed.data(using: .utf8)?.write(to: logFileURL)
     }
 
     static func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
@@ -94,11 +74,4 @@ class Logger {
     static func logFilePath() -> String {
         return shared.logFileURL.path
     }
-    #else
-    static func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
-    static func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
-    static func warning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
-    static func error(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {}
-    static func logFilePath() -> String { return "" }
-    #endif
 }
