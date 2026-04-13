@@ -68,6 +68,49 @@ class TranscriptionService {
         }
     }
 
+    func transcribeCloudFromSamples(samples: [Float]) async throws -> String {
+        let wavData = AudioRecordingService.createWavHeader(
+            dataSize: UInt32(samples.count * 2),
+            sampleRate: UInt32(AudioRecordingService.targetSampleRate)
+        ) + AudioRecordingService.floatToPCM16(samples)
+        return try await transcribeCloud(audioData: wavData)
+    }
+
+    /// Batch transcription from raw samples. Handles the full cascade:
+    /// cloudWithFallback: proxy -> elevenlabs direct -> local
+    /// localOnly: local only
+    func transcribeBatch(samples: [Float], mode: TranscriptionMode) async throws -> String {
+        switch mode {
+        case .localOnly:
+            return try await transcribeLocallyFromSamples(samples)
+        case .cloudWithFallback:
+            // Try cloud first
+            do {
+                return try await transcribeCloudFromSamples(samples: samples)
+            } catch {
+                Logger.warning("TranscriptionService: Cloud failed, trying local: \(error.localizedDescription)")
+                // Fall back to local
+                do {
+                    return try await transcribeLocallyFromSamples(samples)
+                } catch let localError {
+                    Logger.error("TranscriptionService: Local also failed: \(localError.localizedDescription)")
+                    throw error // throw original cloud error
+                }
+            }
+        }
+    }
+
+    private func transcribeLocallyFromSamples(_ samples: [Float]) async throws -> String {
+        guard localService.isAvailable else {
+            throw TranscriptionError.localFallbackUnavailable
+        }
+        do {
+            return try await localService.transcribeFromSamples(samples)
+        } catch let error as LocalTranscriptionError {
+            throw TranscriptionError.localTranscriptionFailed(error.localizedDescription)
+        }
+    }
+
     private func transcribeCloud(audioData: Data) async throws -> String {
         var lastError: Error?
 

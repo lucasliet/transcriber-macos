@@ -68,7 +68,7 @@ class NotchIndicatorPanel: NSPanel {
         switch state {
         case .idle:
             dismiss()
-        case .recording, .transcribing, .success, .error:
+        case .recording, .streaming, .transcribing, .success, .error:
             show()
         }
     }

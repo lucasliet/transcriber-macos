@@ -27,6 +27,9 @@ SOURCES=(
     "$PROJECT_DIR/Services/Logger.swift"
     "$PROJECT_DIR/Services/HotkeyManager.swift"
     "$PROJECT_DIR/Services/AudioRecorder.swift"
+    "$PROJECT_DIR/Services/AudioRecordingService.swift"
+    "$PROJECT_DIR/Services/HCaptchaService.swift"
+    "$PROJECT_DIR/Services/StreamingTranscriptionService.swift"
     "$PROJECT_DIR/Services/TranscriptionService.swift"
     "$PROJECT_DIR/Services/LocalTranscriptionService.swift"
     "$PROJECT_DIR/Services/TextPaster.swift"
@@ -45,6 +48,7 @@ swiftc \
     -framework Carbon \
     -framework ApplicationServices \
     -framework Speech \
+    -framework WebKit \
     -parse-as-library \
     "${SOURCES[@]}"
 

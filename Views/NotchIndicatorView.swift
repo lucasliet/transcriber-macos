@@ -4,6 +4,7 @@ import AppKit
 enum NotchState: Equatable {
     case idle
     case recording
+    case streaming(String)
     case transcribing
     case success(String)
     case error(String)
@@ -28,6 +29,7 @@ struct NotchIndicatorView: View {
 
     private var isExpanded: Bool {
         if case .success = notchState { return showTranscribedText }
+        if case .streaming = notchState { return true }
         return false
     }
 
@@ -44,6 +46,18 @@ struct NotchIndicatorView: View {
                 .frame(maxWidth: .infinity)
 
             if case .success(let text) = notchState, showTranscribedText {
+                ScrollView(.vertical, showsIndicators: false) {
+                    Text(text)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, contentPadding)
+                        .padding(.vertical, 14)
+                }
+                .frame(maxHeight: 80)
+            }
+
+            if case .streaming(let text) = notchState {
                 ScrollView(.vertical, showsIndicators: false) {
                     Text(text)
                         .font(.system(size: 12))
@@ -75,7 +89,7 @@ struct NotchIndicatorView: View {
         .animation(.easeInOut(duration: 0.2), value: notchState)
         .onChange(of: notchState) { newState in
             switch newState {
-            case .recording:
+            case .recording, .streaming:
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     dotPulse = true
                 }
@@ -144,6 +158,11 @@ struct NotchIndicatorView: View {
                         RoundedRectangle(cornerRadius: 3)
                             .stroke(.red, lineWidth: 1.5)
                     )
+            case .streaming:
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 14, height: 14)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
             default:
                 Image(nsImage: icon)
                     .resizable()
@@ -169,6 +188,11 @@ struct NotchIndicatorView: View {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
+            case .streaming:
+                Circle()
+                    .fill(.blue)
+                    .frame(width: 6, height: 6)
+                    .opacity(dotPulse ? 1.0 : 0.3)
             case .idle:
                 EmptyView()
             }
@@ -200,12 +224,15 @@ struct NotchIndicatorView: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.red)
                 .fixedSize()
+        case .streaming:
+            Text(formatDuration(appState.recordingDuration))
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.6))
+                .fixedSize()
         case .idle:
             EmptyView()
         }
     }
-
-    // MARK: - Right content
 
     @ViewBuilder
     private var rightContent: some View {
@@ -213,6 +240,11 @@ struct NotchIndicatorView: View {
         case .recording:
             Circle()
                 .fill(.red)
+                .frame(width: 6, height: 6)
+                .opacity(dotPulse ? 1.0 : 0.3)
+        case .streaming:
+            Circle()
+                .fill(.blue)
                 .frame(width: 6, height: 6)
                 .opacity(dotPulse ? 1.0 : 0.3)
         case .transcribing:

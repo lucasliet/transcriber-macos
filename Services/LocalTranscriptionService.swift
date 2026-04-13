@@ -13,17 +13,22 @@ class LocalTranscriptionService {
     func transcribe(audioAt url: URL) async throws -> String {
         Logger.info("LocalTranscriptionService: Starting local transcription from \(url.path)")
 
-        let audioSamples = try loadAudioSamples(from: url)
-        Logger.info("LocalTranscriptionService: Loaded \(audioSamples.count) audio samples")
+        let (audioSamples, sampleRate) = try loadAudioSamples(from: url)
+        Logger.info("LocalTranscriptionService: Loaded \(audioSamples.count) audio samples at \(sampleRate)Hz")
 
-        return try await transcribe(samples: audioSamples)
+        return try await transcribe(samples: audioSamples, sampleRate: sampleRate)
     }
 
-    private func transcribe(samples: [Float]) async throws -> String {
+    func transcribeFromSamples(_ samples: [Float]) async throws -> String {
+        Logger.info("LocalTranscriptionService: Starting local transcription from \(samples.count) samples")
+        return try await transcribe(samples: samples, sampleRate: 16000)
+    }
+
+    private func transcribe(samples: [Float], sampleRate: Double = 44100) async throws -> String {
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
 
-        let sourceBuffer = createPCMBuffer(from: samples)
+        let sourceBuffer = createPCMBuffer(from: samples, sampleRate: sampleRate)
         let buffer = await Self.prepareBuffer(sourceBuffer, for: transcriber)
         Logger.info("LocalTranscriptionService: Audio buffer ready (format: \(buffer.format.description))")
 
@@ -50,7 +55,7 @@ class LocalTranscriptionService {
         return trimmed
     }
 
-    private func loadAudioSamples(from url: URL) throws -> [Float] {
+    private func loadAudioSamples(from url: URL) throws -> (samples: [Float], sampleRate: Double) {
         let audioFile = try AVAudioFile(forReading: url)
         let srcFormat = audioFile.processingFormat
         let frameCount = UInt32(audioFile.length)
@@ -66,11 +71,12 @@ class LocalTranscriptionService {
             throw LocalTranscriptionError.audioConversionFailed
         }
 
-        return Array(UnsafeBufferPointer(start: channelData, count: Int(buffer.frameLength)))
+        let samples = Array(UnsafeBufferPointer(start: channelData, count: Int(buffer.frameLength)))
+        return (samples, srcFormat.sampleRate)
     }
 
-    private func createPCMBuffer(from samples: [Float]) -> AVAudioPCMBuffer {
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+    private func createPCMBuffer(from samples: [Float], sampleRate: Double = 16000) -> AVAudioPCMBuffer {
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))!
         buffer.frameLength = AVAudioFrameCount(samples.count)
         samples.withUnsafeBufferPointer { ptr in
@@ -171,6 +177,17 @@ class LocalTranscriptionServiceProxy {
                 throw LocalTranscriptionError.unavailable
             }
             return try await service.transcribe(audioAt: url)
+        } else {
+            throw LocalTranscriptionError.unavailable
+        }
+    }
+
+    func transcribeFromSamples(_ samples: [Float]) async throws -> String {
+        if #available(macOS 26, *) {
+            guard let service = _serviceStorage as? LocalTranscriptionService else {
+                throw LocalTranscriptionError.unavailable
+            }
+            return try await service.transcribeFromSamples(samples)
         } else {
             throw LocalTranscriptionError.unavailable
         }
