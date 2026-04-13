@@ -8,15 +8,22 @@ class AppState: ObservableObject {
     @Published var showingHotkeySettings = false
     @Published var hotkeyDisplay: String = ""
     @Published var transcriptionModeDisplayName: String = ""
-    
+    @Published var notchState: NotchState = .idle
+    @Published var recordingDuration: TimeInterval = 0
+    @Published var activeAppIcon: NSImage?
+
     let hotkeyManager: HotkeyManager
     let audioRecorder: AudioRecorder
     let transcriptionService: TranscriptionService
     let textPaster: TextPaster
     let settingsManager: SettingsManager
-    
+    let notchPanel = NotchIndicatorPanel()
+
     private var cancellables = Set<AnyCancellable>()
-    
+    private var notchResetTask: Task<Void, Never>?
+    private var recordingTimer: Timer?
+    private var recordingStartTime: Date?
+
     init() {
         self.settingsManager = SettingsManager()
         self.hotkeyManager = HotkeyManager()
@@ -36,6 +43,8 @@ class AppState: ObservableObject {
                 self?.transcriptionModeDisplayName = mode.displayName
             }
             .store(in: &cancellables)
+
+        notchPanel.configure(appState: self)
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             UpdateManager.shared.checkForUpdates()
@@ -65,6 +74,9 @@ class AppState: ObservableObject {
         Logger.info("Starting recording...")
         isRecording = true
         statusMessage = "Gravando..."
+        notchState = .recording
+        captureActiveAppIcon()
+        startRecordingTimer()
 
         do {
             try audioRecorder.startRecording()
@@ -72,6 +84,7 @@ class AppState: ObservableObject {
         } catch {
             Logger.error("Failed to start recording: \(error.localizedDescription)")
             isRecording = false
+            notchState = .error(error.localizedDescription)
             statusMessage = "Erro: \(error.localizedDescription)"
         }
     }
@@ -84,6 +97,8 @@ class AppState: ObservableObject {
 
         isRecording = false
         statusMessage = "Transcrevendo..."
+        notchState = .transcribing
+        stopRecordingTimer()
         Logger.info("Starting transcription flow")
 
         do {
@@ -107,18 +122,32 @@ class AppState: ObservableObject {
             textPaster.pasteText(transcribedText)
             Logger.info("Text paste completed")
 
+            notchState = .success(transcribedText)
             statusMessage = "Texto colado!"
 
             try? FileManager.default.removeItem(at: audioURL)
             Logger.debug("Temporary audio file cleaned up")
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            notchResetTask?.cancel()
+            notchResetTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { return }
+                self?.notchState = .idle
                 self?.statusMessage = "Pronto para gravar"
             }
         } catch {
-            let errorMsg = "Erro: \(error.localizedDescription)"
-            Logger.error("Transcription flow failed: \(error.localizedDescription)")
-            statusMessage = errorMsg
+            let errorMsg = error.localizedDescription
+            Logger.error("Transcription flow failed: \(errorMsg)")
+            notchState = .error(errorMsg)
+            statusMessage = "Erro: \(errorMsg)"
+
+            notchResetTask?.cancel()
+            notchResetTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { return }
+                self?.notchState = .idle
+                self?.statusMessage = "Pronto para gravar"
+            }
         }
     }
     
@@ -131,5 +160,36 @@ class AppState: ObservableObject {
     
     func checkUpdates() {
         UpdateManager.shared.checkForUpdates(isUserInitiated: true)
+    }
+
+    // MARK: - Recording Timer
+
+    private func startRecordingTimer() {
+        recordingDuration = 0
+        recordingStartTime = Date()
+        recordingTimer?.invalidate()
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let start = self.recordingStartTime else { return }
+                self.recordingDuration = Date().timeIntervalSince(start)
+            }
+        }
+    }
+
+    private func stopRecordingTimer() {
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        recordingStartTime = nil
+    }
+
+    // MARK: - Active App Icon
+
+    private func captureActiveAppIcon() {
+        if let app = NSWorkspace.shared.frontmostApplication,
+           let url = app.bundleURL {
+            activeAppIcon = NSWorkspace.shared.icon(forFile: url.path)
+        } else {
+            activeAppIcon = nil
+        }
     }
 }

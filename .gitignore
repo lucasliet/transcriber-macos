@@ -19,3 +19,11 @@ Package.resolved
 # Temporary files
 *.tmp
 *.temp
+
+# Reference projects
+typewhisper-mac/
+elevenlabs-transcribe-wrapper/
+
+# IDE
+.claude/
+.agents/
