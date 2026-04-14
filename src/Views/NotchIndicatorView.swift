@@ -17,7 +17,7 @@ struct NotchIndicatorView: View {
     @State private var showTranscribedText = false
 
     private let extensionWidth: CGFloat = 75
-    private let contentPadding: CGFloat = 28
+    private let contentPadding: CGFloat = 36
 
     private var notchState: NotchState {
         appState.notchState
@@ -30,6 +30,7 @@ struct NotchIndicatorView: View {
     private var isExpanded: Bool {
         if case .success = notchState { return showTranscribedText }
         if case .streaming = notchState { return true }
+        if case .transcribing = notchState { return true }
         return false
     }
 
@@ -46,27 +47,38 @@ struct NotchIndicatorView: View {
                 .frame(maxWidth: .infinity)
 
             if case .success(let text) = notchState, showTranscribedText {
-                ScrollView(.vertical, showsIndicators: false) {
-                    Text(text)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, contentPadding)
-                        .padding(.vertical, 14)
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        Text(text)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, contentPadding)
+                            .padding(.vertical, 14)
+                            .id("successText")
+                    }
+                    .frame(maxHeight: 80)
                 }
-                .frame(maxHeight: 80)
             }
 
             if case .streaming(let text) = notchState {
-                ScrollView(.vertical, showsIndicators: false) {
-                    Text(text)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, contentPadding)
-                        .padding(.vertical, 14)
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        Text(text)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, contentPadding)
+                            .padding(.vertical, 14)
+                            .id("streamingText")
+                    }
+                    .frame(maxHeight: 80)
+                    .onChange(of: text) { _ in
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("streamingText", anchor: .bottom)
+                        }
+                    }
                 }
-                .frame(maxHeight: 80)
             }
 
             if case .error(let message) = notchState {
@@ -117,7 +129,7 @@ struct NotchIndicatorView: View {
                 leftContent
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(.leading, 20)
+            .padding(.leading, 28)
 
             // Center notch spacer
             if geometry.hasNotch {
@@ -128,7 +140,7 @@ struct NotchIndicatorView: View {
             // Right zone
             rightContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.trailing, 34)
+                .padding(.trailing, 28)
         }
     }
 

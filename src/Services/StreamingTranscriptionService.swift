@@ -145,6 +145,9 @@ class StreamingTranscriptionService {
         Logger.info("StreamingTranscriptionService: Commit sent, waiting for final transcript...")
 
         let deadline = Date().addingTimeInterval(timeout)
+        var lastFinalLength = -1
+        var stableCount = 0
+
         while Date() < deadline {
             let currentPartial = await collector.currentText()
             let currentFinals = await collector.finalizedText()
@@ -152,9 +155,23 @@ class StreamingTranscriptionService {
             if !currentFinals.isEmpty {
                 _partialText = currentFinals
 
-                Logger.info("StreamingTranscriptionService: Final transcript received (\(currentFinals.count) chars)")
-                disconnect()
-                return currentFinals.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Wait for the transcript to stabilize — the server may send
+                // an initial committed_transcript that doesn't include the last
+                // audio chunk, then follow up with an updated one. Continue
+                // receiving until the final text stops changing for 2 polls
+                // (400ms) to ensure we capture the complete transcription.
+                if currentFinals.count == lastFinalLength {
+                    stableCount += 1
+                } else {
+                    stableCount = 0
+                    lastFinalLength = currentFinals.count
+                }
+
+                if stableCount >= 2 {
+                    Logger.info("StreamingTranscriptionService: Final transcript stabilized (\(currentFinals.count) chars)")
+                    disconnect()
+                    return currentFinals.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
             }
 
             if !currentPartial.isEmpty {

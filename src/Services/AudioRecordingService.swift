@@ -53,6 +53,13 @@ class AudioRecordingService: NSObject, @unchecked Sendable {
         return copy
     }
 
+    /// Blocks until all pending audio samples on the processing queue have been
+    /// appended to the internal buffer. Call this before reading the buffer to
+    /// guarantee no recent audio is left behind.
+    func drainProcessingQueue() {
+        processingQueue.sync {}
+    }
+
     func getBuffer(fromOffset offset: Int) -> (samples: [Float], newOffset: Int) {
         bufferLock.lock()
         defer { bufferLock.unlock() }

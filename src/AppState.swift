@@ -174,11 +174,17 @@ class AppState: ObservableObject {
             notchState = .transcribing
             statusMessage = "Finalizando transcrição..."
 
+            // Drain the processing queue so every pending sample is in the buffer
+            audioRecordingService.drainProcessingQueue()
+
             // Send one last chunk with only the new audio since last send
             let (finalSamples, _) = audioRecordingService.getBuffer(fromOffset: lastSentAudioOffset)
             let finalDuration = Double(finalSamples.count) / 16000.0
-            if finalDuration > 0.3 {
+            Logger.info("Streaming: Final chunk \(finalDuration)s (\(finalSamples.count) samples)")
+            if finalDuration > 0.05 {
                 try? await streamingService.sendChunk(samples: finalSamples)
+                // Give the server time to process the last audio before committing
+                try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
             }
 
             do {

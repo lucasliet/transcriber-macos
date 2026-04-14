@@ -5,15 +5,16 @@
 The project is structured as a flat Swift package without Xcode usage for
 building, favoring direct `swiftc` compilation via script.
 
-- **Root**: Contains the main app entry point (`TranscriberApp.swift`),
-  `Info.plist`, `build.sh` script, and the Xcode project file
-  (legacy/reference).
-- **Models/**: Data models and structs (e.g., `KeyCombination.swift`).
-- **Views/**: SwiftUI views for the interface (`ContentMenu.swift`,
-  `HotkeySettingsView.swift`, `TranscriptionModeSettingsView.swift`).
-- **Services/**: Service layers (`AudioRecorder.swift`,
-  `TranscriptionService.swift`, `LocalTranscriptionService.swift`,
-  `HotkeyManager.swift`, `Logger.swift`, `SettingsManager.swift`).
+- **src/**: All Swift source code lives here.
+  - `TranscriberApp.swift`, `AppState.swift` — app entry point and state.
+  - **src/Models/**: Data models and structs (e.g., `KeyCombination.swift`).
+  - **src/Views/**: SwiftUI views for the interface (`ContentMenu.swift`,
+    `HotkeySettingsView.swift`, `TranscriptionModeSettingsView.swift`).
+  - **src/Services/**: Service layers (`AudioRecorder.swift`,
+    `TranscriptionService.swift`, `LocalTranscriptionService.swift`,
+    `StreamingTranscriptionService.swift`, `HotkeyManager.swift`,
+    `Logger.swift`, `SettingsManager.swift`).
+- **Root**: `build.sh`, `Info.plist`, `Transcriber.entitlements`.
 - **Media/**: Application assets (`AppIcon.icns`, source PNGs).
 
 ## Build, Test, and Development Commands
