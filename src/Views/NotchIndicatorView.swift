@@ -16,7 +16,7 @@ struct NotchIndicatorView: View {
     @State private var dotPulse = false
     @State private var showTranscribedText = false
 
-    private let extensionWidth: CGFloat = 75
+    private let extensionWidth: CGFloat = 120
     private let contentPadding: CGFloat = 36
 
     private var notchState: NotchState {
@@ -35,7 +35,7 @@ struct NotchIndicatorView: View {
     }
 
     private var currentWidth: CGFloat {
-        if isExpanded { return max(closedWidth, 400) }
+        if isExpanded { return max(closedWidth, 440) }
         if case .error = notchState { return max(closedWidth, 340) }
         return closedWidth
     }
@@ -130,6 +130,7 @@ struct NotchIndicatorView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .padding(.leading, 28)
+            .padding(.top, 20) // avoid being clipped by the notch's top corner curve
 
             // Center notch spacer
             if geometry.hasNotch {
@@ -141,6 +142,7 @@ struct NotchIndicatorView: View {
             rightContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                 .padding(.trailing, 28)
+                .padding(.top, 20)
         }
     }
 
