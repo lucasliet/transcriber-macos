@@ -20,7 +20,7 @@ enum PushToTalkKey: String, CaseIterable, Sendable {
     ///
     /// `CGEventFlags.maskAlternate` is the union mask — it's set whenever *either* Option
     /// key is down. Using it means: hold Left ⌥, tap Right ⌥, and the release is invisible
-    /// (the union bit is still set by the left key), so `onRelease` never fires. The mic
+    /// (the union bit is still set by the left key), so the release never fires. The mic
     /// stays open, the HUD stays up, and the next press is swallowed too.
     ///
     /// These raw values are the NX_DEVICE* masks from IOKit's event system; they carry the
@@ -35,9 +35,9 @@ enum PushToTalkKey: String, CaseIterable, Sendable {
 
     var displayName: String {
         switch self {
-        case .rightOption: "Right ⌥"
+        case .rightOption: "⌥ direito"
         case .fn: "fn"
-        case .rightCommand: "Right ⌘"
+        case .rightCommand: "⌘ direito"
         }
     }
 
@@ -46,27 +46,49 @@ enum PushToTalkKey: String, CaseIterable, Sendable {
     var shouldConsumeEvent: Bool { self != .fn }
 }
 
-/// Watches for a held modifier key using a `CGEventTap`.
+/// Watches for the push-to-talk binding using a `CGEventTap`.
 ///
 /// A tap is required rather than `NSEvent.addGlobalMonitor` because `fn` and left/right
 /// modifier discrimination don't surface through the higher-level APIs. This needs
 /// Accessibility permission; without it `CGEvent.tapCreate` returns nil.
+///
+/// The tap also owns the press→recording mapping, because `.hybrid` needs to know how long
+/// the key was held and that is a fact about the keyboard, not about dictation.
 @MainActor
 final class HotkeyMonitor {
+    /// A tap under this is a "tap"; anything longer is a hold. Matches the old app.
+    private static let toggleThreshold: TimeInterval = 1.0
+
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var isPressed = false
 
-    var key: PushToTalkKey = .rightOption
-    var onPress: (() -> Void)?
-    var onRelease: (() -> Void)?
+    /// Physical state of the binding.
+    private var isKeyDown = false
+    /// Whether the binding is physically held right now. In `.hybrid` a recording can be
+    /// running with this false — that's a latched recording.
+    var isKeyHeld: Bool { isKeyDown }
+    /// Carbon modifier mask as of the last `flagsChanged`.
+    private var carbonModifiers: UInt32 = 0
+    private var keyDownAt: Date?
+    /// Logical state: true between `onStart` and `onStop`, which in `.hybrid` can outlive
+    /// the key being held.
+    private(set) var isRecording = false
+
+    var binding: HotkeyBinding = .modifier(.rightOption)
+    var mode: RecordingMode = .hybrid
+    var onStart: (() -> Void)?
+    var onStop: (() -> Void)?
 
     /// - Returns: `false` if the tap couldn't be created — almost always missing Accessibility permission.
     @discardableResult
     func start() -> Bool {
         stop()
 
+        // `.combination` needs keyDown/keyUp as well; watching all three costs nothing and
+        // keeps one code path for both binding kinds.
         let mask = (1 << CGEventType.flagsChanged.rawValue)
+            | (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
 
         guard let tap = CGEvent.tapCreate(
@@ -91,6 +113,7 @@ final class HotkeyMonitor {
             userInfo: refcon
         ) else {
             Log.hotkey.error("tapCreate failed — Accessibility permission missing?")
+            FileLog.error("hotkey: falha ao criar o event tap (permissão de Acessibilidade?)")
             return false
         }
 
@@ -100,7 +123,9 @@ final class HotkeyMonitor {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        Log.hotkey.info("listening for \(self.key.displayName)")
+        let name = binding.displayName
+        Log.hotkey.info("listening for \(name, privacy: .public)")
+        FileLog.info("hotkey: escutando \(name) (\(mode.rawValue))")
         return true
     }
 
@@ -113,7 +138,18 @@ final class HotkeyMonitor {
         }
         tap = nil
         runLoopSource = nil
-        isPressed = false
+        isKeyDown = false
+        keyDownAt = nil
+        isRecording = false
+    }
+
+    /// Drops the latch without firing `onStop` — for when the controller stopped the
+    /// recording on its own (an error, a Record button press) and the monitor's idea of
+    /// the world is now stale.
+    func resetLatch() {
+        isRecording = false
+        isKeyDown = false
+        keyDownAt = nil
     }
 
     // MARK: - Tap callback
@@ -126,14 +162,102 @@ final class HotkeyMonitor {
             return false
         }
 
+        switch binding {
+        case .modifier(let key):
+            return handleModifier(key, type: type, keyCode: keyCode, flags: flags)
+        case .combination(let combo):
+            return handleCombination(combo, type: type, keyCode: keyCode, flags: flags)
+        }
+    }
+
+    private func handleModifier(
+        _ key: PushToTalkKey,
+        type: CGEventType,
+        keyCode: Int64,
+        flags: CGEventFlags
+    ) -> Bool {
         guard type == .flagsChanged, keyCode == key.keyCode else { return false }
 
-        let nowPressed = flags.contains(key.flag)
-        guard nowPressed != isPressed else { return false }
-        isPressed = nowPressed
+        let nowDown = flags.contains(key.flag)
+        guard nowDown != isKeyDown else { return false }
+        isKeyDown = nowDown
 
-        if nowPressed { onPress?() } else { onRelease?() }
-
+        if nowDown { pressed() } else { released() }
         return key.shouldConsumeEvent
+    }
+
+    private func handleCombination(
+        _ combo: KeyCombination,
+        type: CGEventType,
+        keyCode: Int64,
+        flags: CGEventFlags
+    ) -> Bool {
+        switch type {
+        case .flagsChanged:
+            carbonModifiers = KeyCombination.carbonModifiers(from: flags)
+            // Letting go of ⌥ while still holding T has to count as a release, or the mic
+            // stays open until the letter key happens to come up.
+            if isKeyDown, !combo.matches(carbonModifiers: carbonModifiers) {
+                isKeyDown = false
+                released()
+            }
+            return false
+
+        case .keyDown:
+            guard UInt32(keyCode) == combo.keyCode,
+                  combo.matches(carbonModifiers: carbonModifiers),
+                  !isKeyDown
+            else { return false }
+            isKeyDown = true
+            pressed()
+            return true
+
+        case .keyUp:
+            guard UInt32(keyCode) == combo.keyCode, isKeyDown else { return false }
+            isKeyDown = false
+            released()
+            return true
+
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Press → recording
+
+    private func pressed() {
+        // Any press while recording stops it. In `.hybrid` this is how a latched recording
+        // is ended; in `.pushToTalk` it can only happen if a release was missed.
+        if isRecording {
+            finishRecording()
+            return
+        }
+        keyDownAt = Date()
+        isRecording = true
+        onStart?()
+    }
+
+    private func released() {
+        guard isRecording else { return }
+
+        if mode == .pushToTalk {
+            finishRecording()
+            return
+        }
+
+        let held = keyDownAt.map { Date().timeIntervalSince($0) } ?? 0
+        if held < Self.toggleThreshold {
+            // Tap: latch on. The recording now ends on the next press, not this release.
+            Log.hotkey.info("tap (\(held, format: .fixed(precision: 2))s) — latched on")
+            FileLog.info("hotkey: toque curto, gravação travada ligada")
+            return
+        }
+        finishRecording()
+    }
+
+    private func finishRecording() {
+        isRecording = false
+        keyDownAt = nil
+        onStop?()
     }
 }

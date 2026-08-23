@@ -16,7 +16,7 @@ struct MurmurYouTubeApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .appInfo) {
-                Button("Reveal Dictionary File") {
+                Button("Mostrar arquivo do dicionário") {
                     NSWorkspace.shared.activateFileViewerSelecting([DictionaryStore.fileURL])
                 }
             }
@@ -32,10 +32,10 @@ struct MurmurYouTubeApp: App {
         MenuBarExtra {
             MenuContent(controller: delegate.controller)
         } label: {
-            Image(systemName: delegate.controller.state.isActive ? "waveform.circle.fill" : "waveform")
+            Image(systemName: delegate.controller.state.isBusy ? "waveform.circle.fill" : "waveform")
         }
 
-        Window("Engine comparison", id: "comparison") {
+        Window("Comparação de motores", id: "comparison") {
             ComparisonWindow(controller: delegate.controller)
         }
         .defaultSize(width: 640, height: 560)
@@ -47,6 +47,7 @@ struct MurmurYouTubeApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = DictationController()
     private var hud: HUDPanel?
+    private var notch: NotchPanel?
     private var stateObservation: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
 
         hud = HUDPanel(controller: controller)
+        notch = NotchPanel(controller: controller)
 
         if !controller.activate() {
             Permissions.promptForAccessibility()
@@ -96,8 +98,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // The release workflow publishes a zipped .app on every tag; without this nothing
+        // ever installs it. Deferred a beat so it never competes with launch.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            UpdateManager.shared.checkForUpdates()
+        }
+
         observeState()
-        Log.app.info("Murmur YouTube ready — hold \(Settings.shared.pushToTalkKey.displayName) to dictate")
+
+        let binding = Settings.shared.hotkeyBinding.displayName
+        Log.app.info("Murmur YouTube ready — hold \(binding, privacy: .public) to dictate")
+        FileLog.info("app: pronto — atalho \(binding), modo \(Settings.shared.recordingMode.rawValue)")
     }
 
     /// `murmuryt://clear` and `murmuryt://show`, used by the legacy HTML dashboard and
@@ -120,19 +132,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// value — usable from the app delegate and from a URL handler.
     static func showComparisonWindow() {
         RunStore.shared.reload()
-        if let existing = NSApp.windows.first(where: { $0.title == "Engine comparison" }) {
+        if let existing = NSApp.windows.first(where: { $0.title == "Comparação de motores" }) {
             existing.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        let isOpen = NSApp.windows.contains { $0.title == "Engine comparison" && $0.isVisible }
+        let isOpen = NSApp.windows.contains { $0.title == "Comparação de motores" && $0.isVisible }
         UserDefaults.standard.set(isOpen, forKey: "comparisonWindowOpen")
         controller.deactivate()
     }
 
-    /// Shows and hides the HUD in step with the controller's state.
+    /// Shows and hides the overlay in step with the controller's state.
     private func observeState() {
         withObservationTracking {
             _ = controller.state
@@ -140,12 +152,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 guard let self else { return }
                 if self.controller.state.isActive {
-                    self.hud?.present()
+                    self.presentOverlay()
                 } else {
+                    self.notch?.dismiss()
                     self.hud?.dismiss()
                 }
                 self.observeState()
             }
+        }
+    }
+
+    /// The notch overlay needs a physical notch to grow out of. On an external display or a
+    /// non-notch Mac it can't render, so the floating HUD stands in — the old app showed
+    /// nothing at all in that case.
+    private func presentOverlay() {
+        if Settings.shared.hudStyle == .notch, notch?.canPresent == true {
+            hud?.dismiss()
+            notch?.present()
+        } else {
+            notch?.dismiss()
+            hud?.present()
         }
     }
 
@@ -168,9 +194,9 @@ private struct MenuContent: View {
     @State private var parakeetOnDisk = ParakeetModels.isDownloaded
 
     private var parakeetStatus: String {
-        if isPreloadingParakeet { return "Loading Parakeet models…" }
+        if isPreloadingParakeet { return "Carregando modelos do Parakeet…" }
         // Reflects what's actually on disk, not just what this menu instance has done.
-        return parakeetOnDisk ? "Parakeet models installed ✓" : "Download Parakeet models…"
+        return parakeetOnDisk ? "Modelos do Parakeet instalados ✓" : "Baixar modelos do Parakeet…"
     }
 
     private func preloadParakeet() {
@@ -188,14 +214,17 @@ private struct MenuContent: View {
     }
 
     var body: some View {
-        Text("Hold \(settings.pushToTalkKey.displayName) to dictate")
+        Text("Segure \(settings.hotkeyBinding.displayName) para ditar")
 
         Divider()
 
-        Picker("Push-to-talk key", selection: Binding(
+        Picker("Tecla", selection: Binding(
             get: { settings.pushToTalkKey },
             set: { key in
                 settings.pushToTalkKey = key
+                // Picking a modifier here means abandoning any custom combination —
+                // otherwise the choice would appear to do nothing.
+                settings.customHotkey = nil
                 controller.reloadHotkey()
             }
         )) {
@@ -203,32 +232,58 @@ private struct MenuContent: View {
                 Text(key.displayName).tag(key)
             }
         }
+        .disabled(settings.customHotkey != nil)
 
-        Toggle("Compare mode (both engines)", isOn: $settings.compareMode)
+        if let custom = settings.customHotkey {
+            Button("Atalho personalizado: \(custom.displayString) (remover)") {
+                settings.customHotkey = nil
+                controller.reloadHotkey()
+            }
+        }
+
+        Picker("Modo", selection: Binding(
+            get: { settings.recordingMode },
+            set: { mode in
+                settings.recordingMode = mode
+                controller.reloadHotkey()
+            }
+        )) {
+            ForEach(RecordingMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
+            }
+        }
+
+        Toggle("Modo comparação (todos os motores)", isOn: $settings.compareMode)
 
         if !settings.compareMode {
-            Picker("Engine", selection: $settings.engine) {
+            Picker("Motor", selection: $settings.engine) {
                 ForEach(SpeechEngineChoice.allCases, id: \.self) { choice in
                     Text(choice.displayName).tag(choice)
                 }
             }
         }
 
-        Toggle("Clean up text", isOn: $settings.cleanupEnabled)
+        Picker("Indicador", selection: $settings.hudStyle) {
+            ForEach(HUDStyle.allCases, id: \.self) { style in
+                Text(style.displayName).tag(style)
+            }
+        }
+
+        Toggle("Limpar texto", isOn: $settings.cleanupEnabled)
 
         if settings.cleanupEnabled {
-            Toggle("Smart cleanup (on-device AI)", isOn: $settings.smartCleanup)
+            Toggle("Limpeza inteligente (IA no dispositivo)", isOn: $settings.smartCleanup)
                 .disabled(!FoundationModelFormatter.isAvailable)
             if let reason = FoundationModelFormatter.unavailableReason {
                 Text(reason).font(.caption)
             }
         }
 
-        Toggle("Sound", isOn: $settings.soundEnabled)
+        Toggle("Som", isOn: $settings.soundEnabled)
 
         Divider()
 
-        Button("Show comparison window") {
+        Button("Mostrar janela de comparação") {
             RunStore.shared.reload()
             openWindow(id: "comparison")
             NSApp.activate(ignoringOtherApps: true)
@@ -242,14 +297,22 @@ private struct MenuContent: View {
                 .disabled(isPreloadingParakeet || parakeetOnDisk)
         }
 
-        if !Permissions.hasAccessibility {
-            Button("Grant Accessibility…") { Permissions.openAccessibilitySettings() }
-        }
-        if !Permissions.hasMicrophone {
-            Button("Grant Microphone…") { Permissions.openMicrophoneSettings() }
+        Button("Verificar atualizações…") {
+            UpdateManager.shared.checkForUpdates(userInitiated: true)
         }
 
-        Button("Quit Murmur YouTube") { NSApp.terminate(nil) }
+        Button("Abrir log") {
+            NSWorkspace.shared.open(FileLog.url)
+        }
+
+        if !Permissions.hasAccessibility {
+            Button("Conceder Acessibilidade…") { Permissions.openAccessibilitySettings() }
+        }
+        if !Permissions.hasMicrophone {
+            Button("Conceder Microfone…") { Permissions.openMicrophoneSettings() }
+        }
+
+        Button("Sair do Murmur YouTube") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }

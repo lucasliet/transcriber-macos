@@ -122,7 +122,9 @@ enum RunLog {
         try? DashboardHTML.render(
             runs: runs,
             compareMode: Settings.shared.compareMode,
-            key: Settings.shared.pushToTalkKey.displayName
+            // The binding, not the modifier: with a custom combination set, the modifier
+            // is not what opens the mic and the dashboard would name the wrong key.
+            key: Settings.shared.hotkeyBinding.displayName
         ).write(to: dashboardURL, atomically: true, encoding: .utf8)
     }
 

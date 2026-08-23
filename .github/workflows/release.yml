@@ -1,4 +1,4 @@
-name: Release Build
+name: Release
 
 on:
   push:
@@ -12,8 +12,7 @@ jobs:
     outputs:
       release_notes: ${{ steps.set_output.outputs.release_notes }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -22,61 +21,72 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Install Copilot CLI
-        run: npm install -g @github/copilot
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
 
-      - name: Generate Release Notes with Copilot
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          AI_MODEL: gpt-5-mini
+      - name: Build Release Notes Prompt
         run: |
           # Get previous tag or root
           PREV_TAG=$(git describe --tags --abbrev=0 --match "v*" HEAD^ 2>/dev/null || echo "")
           if [ -z "$PREV_TAG" ]; then RANGE="HEAD"; else RANGE="$PREV_TAG..HEAD"; fi
 
-          # Get Git Log for Context
-          GIT_LOG=$(git log $RANGE --pretty=format:"%h - %s (%an)")
+          # Build the prompt into a file to avoid shell quoting issues with
+          # special characters in commit messages (quotes, backticks, $).
+          # Quoted heredocs ('EOF') disable shell expansion entirely; the git
+          # log is appended verbatim so its content is never interpreted.
+          # The file is shared by both generation steps below.
+          cat > prompt.txt <<'EOF'
+          REPO: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
 
-          # Run Copilot
-          copilot --model $AI_MODEL -p "
-            REPO: ${{ github.repository }}
-            VERSION: ${{ github.ref_name }}
+          CHANGES:
+          EOF
+          git log "$RANGE" --pretty=format:"%h - %s (%an)" >> prompt.txt
+          cat >> prompt.txt <<'EOF'
 
-            CHANGES:
-            $GIT_LOG
+          TASK: Generate meaningful release notes for this version based on the changes above.
 
-            TASK: Generate meaningful release notes for this version based on the changes above.
+          GUIDELINES:
+          - Focus on meaningful changes for final user experience, so ignore technical details like refactor and tests made, etc.
+          - Answer everything in brazilian portuguese
+          - Start with the title '# ${{ github.repository }} ${{ github.ref_name }}'
+          - Write a brief, engaging summary paragraph explaining what this release achieves.
+          - Group changes into '## Key Features' (if there are any) and '## Bug Fixes' (if there are any).
+          - Use bullet points.
+          - Be concise but descriptive.
+          - Ignore trivial commits (docs, chores) unless significant.
+          - DO NOT USE EMOJIS anywhere in the output. Use standard Markdown only.
 
-            GUIDELINES:
-            - Start with the title '# Murmur YouTube ${{ github.ref_name }}'
-            - Write a brief, engaging summary paragraph explaining what this release achieves.
-            - Group changes into '## Key Features' (if there are any) and '## Bug Fixes' (if there are any).
-            - Use bullet points.
-            - Be concise but descriptive.
-            - Ignore trivial commits (docs, chores) unless significant.
-            - DO NOT USE EMOJIS anywhere in the output. Use standard Markdown only.
+          Output ONLY the markdown content.
+          EOF
 
-            Output ONLY the markdown content using ---review--- marker as start.
-          " > temp_review.md
-
-      - name: Extract Markdown Body
+      - name: Generate Release Notes with Claude Haiku
+        id: haiku-release-notes
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          if [ -f temp_review.md ]; then
-            awk '/---review---/{found=1; next} found' temp_review.md > RELEASE_BODY.md
-          fi
+          # Feed the prompt via stdin; --output-format text prints only the
+          # final message to stdout, which we redirect to RELEASE_BODY.md.
+          claude -p --model claude-haiku-4-5 --output-format text --max-turns 2 < prompt.txt > RELEASE_BODY.md
+          # An exit 0 with empty output still means no usable notes, so fail
+          # explicitly to let the Z.AI fallback step below take over.
+          [ -s RELEASE_BODY.md ]
 
-          # Fallback: Use last commit message if extraction failed or file missing
+      - name: Generate Release Notes with Z.AI (fallback)
+        if: steps.haiku-release-notes.outcome == 'failure'
+        continue-on-error: true
+        env:
+          ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ZAI_API_KEY }}
+        run: claude -p --model glm-4.5-air --output-format text --max-turns 2 < prompt.txt > RELEASE_BODY.md
+
+      - name: Fallback on empty output
+        run: |
+          # Fallback: Use last commit message if generation failed or file missing/empty
           if [ ! -s RELEASE_BODY.md ]; then
             git log -1 --pretty=%B > RELEASE_BODY.md
           fi
-
-          # Append Footer always
-          echo "" >> RELEASE_BODY.md
-          echo "## Getting Started" >> RELEASE_BODY.md
-          echo "1. Download \`MurmurYouTube.zip\` below." >> RELEASE_BODY.md
-          echo "2. Unzip and drag **Murmur YouTube.app** to **Applications**." >> RELEASE_BODY.md
-          echo "3. Grant **Accessibility** and **Microphone** permissions on first run." >> RELEASE_BODY.md
 
       - name: Set Output
         id: set_output
@@ -85,18 +95,18 @@ jobs:
           cat RELEASE_BODY.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-  build-and-release:
-    name: Build and Release
+  build_app:
+    name: Build macOS Application
     needs: generate-notes
     runs-on: macos-26
     permissions:
       contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      # Package.swift declares swift-tools-version 6.2. Select the newest Xcode present
-      # rather than pinning a version that will age out of the runner image.
+    steps:
+      - uses: actions/checkout@v6
+
+      # Package.swift declares swift-tools-version 6.2. Select the newest Xcode
+      # present rather than pinning a version that will age out of the image.
       - name: Select the newest Xcode
         run: |
           latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
@@ -105,30 +115,49 @@ jobs:
 
       - name: Set App Version
         run: |
-          # Extract version from tag (remove 'v' prefix)
+          # UpdateManager compares this against the latest tag with a numeric
+          # compare, so it has to be the bare version without the 'v'.
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}
           echo "Setting app version to $VERSION"
-
           plutil -replace CFBundleShortVersionString -string "$VERSION" Resources/Info.plist
           plutil -replace CFBundleVersion -string "$VERSION" Resources/Info.plist
 
-      # `make app` builds with SwiftPM, assembles the bundle and signs it. There is no
-      # Developer ID on the runner, so `SIGN_ID` falls back to ad-hoc — same as before.
+      # `make app` builds with SwiftPM, assembles the bundle and signs it. There
+      # is no Developer ID on the runner, so the Makefile's SIGN_ID falls back to
+      # ad-hoc and users meet Gatekeeper on first open.
       - name: Build App
         run: make app CONFIG=release
 
+      # ditto, not zip: it preserves the bundle's symlinks, resource forks and
+      # code signature. A plain `zip -r` produces an .app that won't launch.
       - name: Create ZIP
         run: |
           STAGE="$HOME/Library/Caches/MurmurYouTubeBuild"
           mkdir -p build
           ditto -c -k --keepParent "$STAGE/Murmur YouTube.app" build/MurmurYouTube.zip
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Publish Release to Github
+        uses: ncipollo/release-action@v1
+        if: github.ref_type == 'tag'
         with:
-          files: build/MurmurYouTube.zip
-          draft: false
-          prerelease: false
-          body: ${{ needs.generate-notes.outputs.release_notes }}
-          generate_release_notes: false
+          artifacts: "build/MurmurYouTube.zip"
+          tag: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          removeArtifacts: true
+          body: |
+            **Release Notes**
+            ${{ needs.generate-notes.outputs.release_notes }}
+
+            ---
+            Instruções de instalação
+
+            1. Baixe o **MurmurYouTube.zip** abaixo e descompacte.
+            2. Arraste **Murmur YouTube.app** para a pasta **Aplicativos**.
+            3. O app é assinado ad-hoc, então na primeira vez clique com o botão
+               direito e escolha **Abrir** para passar pelo Gatekeeper.
+            4. Conceda **Acessibilidade** e **Microfone** quando for pedido, e
+               reinicie o app depois de conceder Acessibilidade.
+
+            Se você já tem uma versão instalada, o próprio app oferece a
+            atualização — não precisa baixar na mão.

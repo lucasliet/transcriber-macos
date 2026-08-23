@@ -30,12 +30,32 @@ final class DictationController {
         case starting
         case listening
         case finishing
+        /// Text was injected. Held briefly so the overlay can show what was typed.
+        case success(String)
         case error(String)
 
+        /// Whether the overlay should be on screen.
         var isActive: Bool {
             switch self {
+            case .starting, .listening, .finishing, .success, .error: true
+            case .idle: false
+            }
+        }
+
+        /// Whether a *new* recording may start. Distinct from `isActive`: the overlay
+        /// lingers on `.success`/`.error`, but the next hold must not have to wait it out.
+        var isBusy: Bool {
+            switch self {
             case .starting, .listening, .finishing: true
-            case .idle, .error: false
+            case .idle, .success, .error: false
+            }
+        }
+
+        /// Whether the mic is open — drives the elapsed-time readout.
+        var isCapturing: Bool {
+            switch self {
+            case .starting, .listening: true
+            default: false
             }
         }
     }
@@ -45,6 +65,13 @@ final class DictationController {
     private(set) var transcript = ""
     /// Smoothed 0…1 mic level for the waveform.
     private(set) var level: Float = 0
+    /// How long the mic has been open, for the overlay's timer.
+    private(set) var recordingDuration: TimeInterval = 0
+    /// Icon of the app that had focus when the hold started — the app the text will land
+    /// in. Shown in the notch so you can see where you're dictating before you speak.
+    private(set) var activeAppIcon: NSImage?
+    /// True while a `.hybrid` tap has latched recording on with the key released.
+    var isLatched: Bool { state.isCapturing && !hotkey.isKeyHeld }
 
     private let hotkey = HotkeyMonitor()
     private let capture = AudioCapture()
@@ -72,6 +99,9 @@ final class DictationController {
     private var releasedAt: Date?
     private var engineName = ""
 
+    private var durationTimer: Timer?
+    private var resetTask: Task<Void, Never>?
+
     /// Compare mode only: the recording, kept so every engine sees identical audio.
     private var recorded: [AudioChunk] = []
     private var isComparing = false
@@ -89,9 +119,10 @@ final class DictationController {
     /// - Returns: `false` if the hotkey tap couldn't be installed (missing Accessibility).
     @discardableResult
     func activate() -> Bool {
-        hotkey.key = Settings.shared.pushToTalkKey
-        hotkey.onPress = { [weak self] in self?.beginDictation() }
-        hotkey.onRelease = { [weak self] in self?.endDictation() }
+        hotkey.binding = Settings.shared.hotkeyBinding
+        hotkey.mode = Settings.shared.recordingMode
+        hotkey.onStart = { [weak self] in self?.beginDictation() }
+        hotkey.onStop = { [weak self] in self?.endDictation() }
         return hotkey.start()
     }
 
@@ -100,7 +131,7 @@ final class DictationController {
         cancelDictation()
     }
 
-    /// Re-arms the tap after the user picks a different push-to-talk key.
+    /// Re-arms the tap after the user picks a different key, binding or recording mode.
     @discardableResult
     func reloadHotkey() -> Bool {
         hotkey.stop()
@@ -115,7 +146,7 @@ final class DictationController {
     /// into another app is a comparison affordance; during ordinary dictation it would mean
     /// every recording silently shipped your audio to a third party's servers.
     func startButtonRecording() {
-        guard case .idle = state else { return }
+        guard !state.isBusy else { return }
         if Settings.shared.compareMode { WisprTrigger.press() }
         beginDictation()
     }
@@ -124,16 +155,22 @@ final class DictationController {
     /// finishing — otherwise every run would wait the full round trip end to end.
     func stopButtonRecording() {
         WisprTrigger.release()
+        // The tap never saw a press for a button-driven recording, and in `.hybrid` it
+        // would otherwise think a latch is still live and swallow the next hold.
+        hotkey.resetLatch()
         endDictation()
     }
 
     // MARK: - Dictation
 
     private func beginDictation() {
-        guard case .idle = state else { return }
+        guard !state.isBusy else { return }
+        resetTask?.cancel()
         state = .starting
         transcript = ""
         holdStarted = Date()
+        captureActiveAppIcon()
+        startDurationTimer()
         isComparing = Settings.shared.compareMode
         recorded.removeAll(keepingCapacity: true)
         engineName = isComparing ? "Comparing…" : Settings.shared.engine.displayName
@@ -222,9 +259,10 @@ final class DictationController {
         // run the whole tail again — re-reading `transcript` before the first pass cleared
         // it and pasting the same utterance twice. The window is wide: Parakeet transcribes
         // inside `finish()`, and smart cleanup adds up to 4s on top.
-        guard state.isActive, state != .finishing else { return }
+        guard state.isBusy, state != .finishing else { return }
         state = .finishing
         capture.stop()
+        stopDurationTimer()
         level = 0
         releasedAt = Date()
 
@@ -250,6 +288,7 @@ final class DictationController {
             guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 state = .idle
                 transcript = ""
+                activeAppIcon = nil
                 return
             }
 
@@ -267,15 +306,22 @@ final class DictationController {
 
             recordRun(text: output, corrections: corrections)
             TextInjector.insert(output)
+            FileLog.info("ditado: \(output.count) caracteres inseridos via \(engineName)")
             if Settings.shared.soundEnabled { NSSound(named: "Pop")?.play() }
 
-            state = .idle
+            // Held briefly so the overlay can show what was typed, then cleared. The next
+            // hold doesn't wait for it — `.success` is not `isBusy`.
+            state = .success(output)
             transcript = ""
+            scheduleReset()
         }
     }
 
     private func cancelDictation() {
         capture.stop()
+        stopDurationTimer()
+        resetTask?.cancel()
+        hotkey.resetLatch()
         audioContinuation?.finish()
         audioContinuation = nil
         feedTask?.cancel()
@@ -290,10 +336,13 @@ final class DictationController {
         state = .idle
         transcript = ""
         level = 0
+        activeAppIcon = nil
     }
 
     private func teardown() async {
         capture.stop()
+        stopDurationTimer()
+        hotkey.resetLatch()
         audioContinuation?.finish()
         audioContinuation = nil
         await feedTask?.value
@@ -417,7 +466,12 @@ final class DictationController {
 
     private func fail(_ message: String) {
         Log.app.error("\(message)")
+        FileLog.error("ditado: \(message)")
         capture.stop()
+        stopDurationTimer()
+        // A failed recording leaves the tap thinking a latch is live; the next hold would
+        // be read as the press that ends it and nothing would record.
+        hotkey.resetLatch()
         audioContinuation?.finish()
         audioContinuation = nil
         feedTask?.cancel()
@@ -427,10 +481,50 @@ final class DictationController {
         consumeTask = nil
         state = .error(message)
         level = 0
+        scheduleReset()
+    }
 
-        Task { @MainActor in
+    // MARK: - Overlay state
+
+    /// Clears `.success` / `.error` after a beat so the overlay doesn't linger.
+    private func scheduleReset() {
+        resetTask?.cancel()
+        resetTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
-            if case .error = state { state = .idle }
+            guard !Task.isCancelled else { return }
+            switch state {
+            case .success, .error:
+                state = .idle
+                activeAppIcon = nil
+            default:
+                break
+            }
         }
+    }
+
+    private func startDurationTimer() {
+        recordingDuration = 0
+        durationTimer?.invalidate()
+        let started = Date()
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.state.isCapturing else { return }
+                self.recordingDuration = Date().timeIntervalSince(started)
+            }
+        }
+    }
+
+    private func stopDurationTimer() {
+        durationTimer?.invalidate()
+        durationTimer = nil
+    }
+
+    /// The app that had focus when the hold started — where the text will be injected.
+    private func captureActiveAppIcon() {
+        guard let app = NSWorkspace.shared.frontmostApplication, let url = app.bundleURL else {
+            activeAppIcon = nil
+            return
+        }
+        activeAppIcon = NSWorkspace.shared.icon(forFile: url.path)
     }
 }

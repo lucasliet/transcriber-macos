@@ -97,7 +97,7 @@ enum DashboardHTML {
         .meta{color:var(--muted);font-size:11.5px;margin-bottom:9px}
         .out{font-size:14px;line-height:1.55;overflow-wrap:anywhere}
         </style></head><body><div class="wrap">
-        <h1>Engine comparison</h1>
+        <h1>Comparação de motores</h1>
         <div class="bar">
           <div class="sub"><span class="dot"></span>live — reloads every 3s · \(runs.count) dictation\(runs.count == 1 ? "" : "s") recorded</div>
           \(runs.isEmpty ? "" : "<a class=\"btn\" href=\"murmuryt://clear\">Clear results</a>")

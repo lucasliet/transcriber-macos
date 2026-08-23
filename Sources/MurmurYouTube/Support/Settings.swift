@@ -43,6 +43,22 @@ enum SpeechEngineChoice: String, CaseIterable, Sendable {
     var isCloud: Bool { self == .elevenlabs }
 }
 
+/// Which overlay shows the live transcript.
+enum HUDStyle: String, CaseIterable, Sendable {
+    /// Grows out of the MacBook's physical notch. Falls back to `.panel` on a display
+    /// that doesn't have one, since there'd be nothing to anchor to.
+    case notch
+    /// A floating capsule above the Dock, with a waveform.
+    case panel
+
+    var displayName: String {
+        switch self {
+        case .notch: "Notch"
+        case .panel: "Painel flutuante"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class Settings {
@@ -50,6 +66,31 @@ final class Settings {
 
     var pushToTalkKey: PushToTalkKey {
         didSet { defaults.set(pushToTalkKey.rawValue, forKey: Keys.pushToTalkKey) }
+    }
+
+    /// A full key combination (⌥⌘T and friends), used instead of `pushToTalkKey` when set.
+    var customHotkey: KeyCombination? {
+        didSet {
+            if let customHotkey, let encoded = try? JSONEncoder().encode(customHotkey) {
+                defaults.set(encoded, forKey: Keys.customHotkey)
+            } else {
+                defaults.removeObject(forKey: Keys.customHotkey)
+            }
+        }
+    }
+
+    /// What actually opens the mic. The custom combination wins when one is set.
+    var hotkeyBinding: HotkeyBinding {
+        if let customHotkey { return .combination(customHotkey) }
+        return .modifier(pushToTalkKey)
+    }
+
+    var recordingMode: RecordingMode {
+        didSet { defaults.set(recordingMode.rawValue, forKey: Keys.recordingMode) }
+    }
+
+    var hudStyle: HUDStyle {
+        didSet { defaults.set(hudStyle.rawValue, forKey: Keys.hudStyle) }
     }
 
     var engine: SpeechEngineChoice {
@@ -81,6 +122,9 @@ final class Settings {
 
     private enum Keys {
         static let pushToTalkKey = "pushToTalkKey"
+        static let customHotkey = "customHotkey"
+        static let recordingMode = "recordingMode"
+        static let hudStyle = "hudStyle"
         static let cleanupEnabled = "cleanupEnabled"
         static let soundEnabled = "soundEnabled"
         static let engine = "engine"
@@ -91,6 +135,12 @@ final class Settings {
     private init() {
         let raw = defaults.string(forKey: Keys.pushToTalkKey) ?? PushToTalkKey.rightOption.rawValue
         pushToTalkKey = PushToTalkKey(rawValue: raw) ?? .rightOption
+        customHotkey = defaults.data(forKey: Keys.customHotkey)
+            .flatMap { try? JSONDecoder().decode(KeyCombination.self, from: $0) }
+        // Hybrid by default: it is a superset of push-to-talk — holding behaves identically
+        // — and it is what this app shipped with before.
+        recordingMode = RecordingMode(rawValue: defaults.string(forKey: Keys.recordingMode) ?? "") ?? .hybrid
+        hudStyle = HUDStyle(rawValue: defaults.string(forKey: Keys.hudStyle) ?? "") ?? .notch
         // Apple by default: no download, no dependency, live text while speaking.
         engine = SpeechEngineChoice(rawValue: defaults.string(forKey: Keys.engine) ?? "") ?? .apple
         cleanupEnabled = defaults.object(forKey: Keys.cleanupEnabled) as? Bool ?? true

@@ -206,14 +206,43 @@ lookahead, `\p{L}`, and `$1`–`$9` in replacements. Nothing else.
 
 ## Releasing
 
-`.github/workflows/release.yml` fires on a `v*` tag. It generates notes with the Copilot
-CLI from the commits since the previous tag, builds with `make app CONFIG=release`, and
-attaches `MurmurYouTube.zip` to a GitHub Release. The runner has no Developer ID, so the
+`.github/workflows/release.yml` fires on a `v*` tag. It generates notes with the Claude
+Code CLI (Haiku, falling back to z.ai/GLM, then to the last commit message) from the
+commits since the previous tag, builds with `make app CONFIG=release`, and attaches
+`MurmurYouTube.zip` to a GitHub Release. The runner has no Developer ID, so the
 `Makefile`'s `SIGN_ID` falls back to ad-hoc — released builds are ad-hoc signed and users
 meet Gatekeeper on first open.
 
-`macos.yml` and `windows.yml` are the contract checks and run on push/PR; they do not
-publish anything.
+**The version stamped into `Resources/Info.plist` is what `UpdateManager` compares against
+the latest tag**, numerically. Ship a tag whose version isn't greater than the previous one
+and every installed copy silently decides it is already up to date.
+
+`claude-code-review.yml` reviews PRs with the same two-provider fallback. `macos.yml` and
+`windows.yml` are the contract checks and run on push/PR; they do not publish anything.
+
+---
+
+## The two overlays and the two "is it running" flags
+
+`DictationController.State` has three predicates and they are not interchangeable:
+
+- **`isActive`** — the overlay should be on screen. Stays true through `.success`/`.error`,
+  which linger about three seconds.
+- **`isBusy`** — a new recording may not start. False during `.success`/`.error`, so the
+  next hold never waits for the overlay to clear.
+- **`isCapturing`** — the mic is open. Drives the elapsed timer.
+
+Anything that means "am I recording" — the Record button, the Rec lamp, the menu bar glyph,
+the counter — must read `isBusy`. Using `isActive` there leaves the button stuck on "Parar"
+for three seconds after every dictation, and pressing it then calls stop on a controller
+that isn't recording.
+
+**A recording can outlive the keypress.** In `.hybrid` (the default) a tap under a second
+latches the mic open until the next press, so `state.isCapturing` true with the key
+physically up is normal, not a stuck tap. Anything that stops a recording without going
+through the tap — the Record button, `fail`, `cancelDictation` — has to call
+`hotkey.resetLatch()`, or the monitor still believes a latch is live and reads the user's
+next hold as the press that ends it.
 
 ---
 

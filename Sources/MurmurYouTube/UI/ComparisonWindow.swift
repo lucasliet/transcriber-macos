@@ -63,16 +63,16 @@ struct ComparisonWindow: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Engine comparison")
+                Text("Comparação de motores")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(Brand.gradient)
-                Text("\(store.runs.count) recording\(store.runs.count == 1 ? "" : "s")")
+                Text("\(store.runs.count) gravaç\(store.runs.count == 1 ? "ão" : "ões")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             if !store.runs.isEmpty {
-                Button("Clear") {
+                Button("Limpar") {
                     RunLog.clear()
                     store.reload()
                 }
@@ -83,7 +83,7 @@ struct ComparisonWindow: View {
     /// One button that records every engine at once — no hotkeys, and the results appear in
     /// this same window, so there's nowhere to go afterwards to read them.
     private var recordBar: some View {
-        let isRecording = controller.state.isActive
+        let isRecording = controller.state.isBusy
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
@@ -95,7 +95,7 @@ struct ComparisonWindow: View {
                     }
                 } label: {
                     Label(
-                        isRecording ? "Stop" : "Record all three",
+                        isRecording ? "Parar" : "Gravar em todos",
                         systemImage: isRecording ? "stop.circle.fill" : "record.circle"
                     )
                     .font(.system(size: 15, weight: .semibold))
@@ -115,11 +115,11 @@ struct ComparisonWindow: View {
     }
 
     private func statusLine(isRecording: Bool) -> String {
-        if isRecording { return "Recording — click Stop when you're done talking." }
+        if isRecording { return "Gravando — aperte Parar quando terminar de falar." }
         if !controller.transcript.isEmpty { return controller.transcript }
         return WisprReader.isInstalled
-            ? "Click Record, talk, click Stop. Apple, Parakeet and Wispr Flow all hear it."
-            : "Click Record, talk, click Stop. Wispr Flow isn't installed, so it's Apple vs Parakeet."
+            ? "Aperte Gravar, fale, aperte Parar. Apple, Parakeet, ElevenLabs e Wispr Flow ouvem o mesmo áudio."
+            : "Aperte Gravar, fale, aperte Parar. O Wispr Flow não está instalado, então é Apple x Parakeet x ElevenLabs."
     }
 
     private var emptyState: some View {
@@ -127,11 +127,11 @@ struct ComparisonWindow: View {
             Image(systemName: "waveform")
                 .font(.system(size: 30))
                 .foregroundStyle(Brand.gradient)
-            Text("Hold \(settings.pushToTalkKey.displayName), say a sentence, let go.")
+            Text("Segure \(settings.hotkeyBinding.displayName), fale uma frase, solte.")
                 .font(.system(size: 15, weight: .semibold))
             Text(settings.compareMode
-                 ? "Both engines run on that one recording and appear here."
-                 : "Turn on Compare mode in the menu bar to see both engines at once.")
+                 ? "Todos os motores rodam nessa gravação e aparecem aqui."
+                 : "Ligue o modo comparação na barra de menus para ver todos de uma vez.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -198,7 +198,7 @@ private struct ComparisonCard: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help("Delete this comparison")
+                    .help("Apagar esta comparação")
                 }
             }
             if let margin {
@@ -211,7 +211,7 @@ private struct ComparisonCard: View {
             } else if runs.count == 1 {
                 HStack(spacing: 5) {
                     ProgressView().controlSize(.small)
-                    Text("running second engine…")
+                    Text("rodando os outros motores…")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -248,7 +248,7 @@ private struct EngineRow: View {
                     .monospacedDigit()
                     .foregroundStyle(isWinner ? .green : .primary)
             }
-            Text("\(run.realtimeFactor, format: .number.precision(.fractionLength(0)))× realtime · \(run.characters) chars")
+            Text("\(run.realtimeFactor, format: .number.precision(.fractionLength(0)))× realtime · \(run.characters) caracteres")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Text(run.text.isEmpty ? "(nothing recognized)" : run.text)

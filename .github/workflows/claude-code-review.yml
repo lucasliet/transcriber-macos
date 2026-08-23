@@ -1,38 +1,88 @@
-name: Code Review
+name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, ready_for_review, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: read
-  id-token: write
-  actions: read 
+concurrency:
+  group: claude-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  gather_context:
+  claude-review:
     runs-on: ubuntu-latest
-    outputs:
-      previous_reviews: ${{ steps.context.outputs.previous_reviews }}
-      has_previous: ${{ steps.context.outputs.has_previous }}
-      ai_model: ${{ steps.context.outputs.ai_model }}
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    # Prompt and tool list are shared by the primary run (Anthropic) and the
+    # fallback run (z.ai) so the two providers can never drift apart.
+    # `--allowed-tools` REPLACES the default tool set, so every tool the review
+    # needs has to be listed here. Read/Grep/Glob are what let the reviewer open
+    # the files it is reviewing; without them the run burns ~20 permission
+    # denials and may end green without posting anything.
+    env:
+      ZAI_MODEL: glm-5.3
+      REVIEW_TOOLS: 'Read,Grep,Glob,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)'
+      REVIEW_PROMPT: |
+        /code-review:code-review
+        REPO: ${{ github.repository }}
+        PR NUMBER: ${{ github.event.pull_request.number }}
+
+        IMPORTANT - Before reviewing, check the PR comments thread for previous code reviews.
+
+        If previous reviews exist:
+        1. DO NOT repeat suggestions that were already made
+        2. Check if previous suggestions were addressed in subsequent commits
+        3. For each previously suggested item:
+            - If FIXED: briefly acknowledge it was resolved (✅)
+            - If NOT FIXED: remind about the pending suggestion
+            - If PARTIALLY FIXED: note what still needs attention
+        4. focus your review only in the commits added since the last review, not the full PR
+
+        For NEW changes (commits after the last review), provide feedback on:
+        - Code quality and best practices
+        - Potential bugs or issues
+        - Performance considerations
+        - Security concerns
+        - Test coverage
+
+        Do not nitpick, focus your review in major issues that cannot be merged.
+        address your suggestions to the class and line you are referring to.
+
+        Structure your review as:
+        ## Previous Suggestions Status (if applicable, if not, just ignore section, don't write anything)
+        [Status of each previous suggestion]
+
+        ## New Findings (if that is the first review, don't add this title)
+        [New issues found in recent commits]
+
+        ## Veredict [commit-hash]
+        [Your final verdict, and if you approve the PR or not]
+
+        Use the repository's AGENTS.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+
+        answer the review in brazilian portuguese.
+
+        Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
       - name: Minimize previous review comments
+        id: check-previous-review
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews?per_page=100" --jq '.[] | select(.user.login == "github-actions[bot]") | .node_id')
-          
+          COMMENTS=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments --jq '.[] | select(.user.login == "claude[bot]") | .node_id')
+
           echo "$COMMENTS" | while read NODE_ID; do
-            [ -z "$NODE_ID" ] && continue
             echo "Minimizando comentário: $NODE_ID"
             gh api graphql -f query='
               mutation {
@@ -45,183 +95,121 @@ jobs:
             '
           done
 
-      - name: Get previous bot reviews
-        id: context
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set AI Model
+        id: set-model
         run: |
-          # Busca reviews anteriores do bot
-          REVIEWS=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews?per_page=100" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]")]')
-          
-          # Se não houver reviews, define valores padrão
-          if [ -z "$REVIEWS" ] || [ "$REVIEWS" = "[]" ]; then
-            echo "ai_model=claude-opus-4-5" >> $GITHUB_OUTPUT
-            echo "has_previous=false" >> $GITHUB_OUTPUT
-            echo "previous_reviews=[]" >> $GITHUB_OUTPUT
-            echo "Usando claude-opus-4-5 (primeira review)"
-            exit 0
+          if [ "${{ steps.check-previous-review.outcome }}" == "success" ]; then
+            echo "AI_MODEL=claude-sonnet-4-6" >> $GITHUB_OUTPUT
+            echo "Usando claude-sonnet-4-6 (review de acompanhamento)"
+          else
+            echo "AI_MODEL=claude-opus-5" >> $GITHUB_OUTPUT
+            echo "Usando claude-opus-5 (primeira review ou fallback)"
           fi
 
-          echo "ai_model=claude-sonnet-4-5" >> $GITHUB_OUTPUT
-          echo "has_previous=true" >> $GITHUB_OUTPUT
-          echo "Usando claude-sonnet-4-5 (review de acompanhamento)"
-          
-          # Constroi o JSON com reviews e seus comentários
-          FULL_CONTEXT=$(echo "$REVIEWS" | jq -c '.[]' | while read -r review; do
-            ID=$(echo "$review" | jq -r .id)
-            BODY=$(echo "$review" | jq -r .body)
-            DATE=$(echo "$review" | jq -r .submitted_at)
-            COMMIT_ID=$(echo "$review" | jq -r .commit_id)
-            
-            # Busca comentários inline deste review específico
-            COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews/$ID/comments" \
-              --jq '[.[] | {path: .path, line: .line, body: .body}]')
-            
-            # Monta objeto unificado
-            jq -n \
-              --arg date "$DATE" \
-              --arg body "$BODY" \
-              --arg commit_id "$COMMIT_ID" \
-              --argjson comments "$COMMENTS" \
-              '{created_at: $date, commit_id: $commit_id, summary: $body, inline_comments: $comments}'
-          done | jq -s '.')
-          
-          # Output multi-line string safely
-          echo "previous_reviews<<EOF" >> $GITHUB_OUTPUT
-          echo "$FULL_CONTEXT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      # claude-code-action refuses to run when this file differs from the version
+      # on the default branch, so on a PR that edits it the review is skipped and
+      # there is nothing for the check below to verify.
+      - name: Detect changes to this workflow
+        id: workflow-diff
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[] | select(.filename == ".github/workflows/claude-code-review.yml") | .filename')
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Este PR altera o workflow de review; a action vai se auto-pular."
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
-  analysis:
-    needs: gather_context
-    runs-on: ubuntu-latest
-    outputs:
-      structured_output: ${{ steps.claude.outputs.structured_output }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1 
+      # Baseline for the checks below. Counting claude[bot] comments is enough:
+      # minimized ones are still returned by the API.
+      - name: Count review comments before the review
+        id: comments-before
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --paginate --jq '.[] | select(.user.login == "claude[bot]") | .id' | wc -l)
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Comentários de review existentes: $COUNT"
 
+      # Primary provider. It never fails the job on its own: quota errors and
+      # every other failure are handled by the z.ai fallback below.
       - name: Run Claude Code Review
-        id: claude
+        id: claude-review
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-            HEAD COMMIT: ${{ github.event.pull_request.head.sha }}
-            HAS PREVIOUS BOT REVIEWS: ${{ needs.gather_context.outputs.has_previous }}
-            
-            PREVIOUS BOT REVIEWS (For Diff Scope context):
-            ${{ needs.gather_context.outputs.previous_reviews }}
-
-            ---
-
-            Review this PR. Use `gh pr diff ${{ github.event.pull_request.number }}` to see the changes.
-            Use `gh pr view ${{ github.event.pull_request.number }} --comments` to see HUMAN REVIEW comments (replied by others). Do not repeat their suggestions. If you agree, you can reply to them backing them up.
-            
-            If HAS PREVIOUS BOT REVIEWS is true:
-            1. Check if previous suggestions were addressed.
-            2. If a critical suggestion/issue was NOT addressed, you MUST add it to the `comments` array again (pointing to the line) to ensure it gets fixed.
-            3. Scope review ONLY on NEW commits since the last review (use the commit_id from previous reviews to find the range).
-            4. Note which issues were fixed in your summary. Use `comments` array for persistent issues.
-
-            Analyze for:
-            - Code quality and best practices
-            - Potential bugs
-            - Performance issues
-            - Security concerns
-
-            Do not nitpick, focus on blocking issues only.
-            
-            Check AGENTS.md and GEMINI.md for style conventions.
-
-            CRITICAL: To avoid "Line could not be resolved" errors, every comment's `line` MUST be part of the diff (added or modified lines, or immediate context). Verify line numbers against `gh pr diff`. If a line is not in the diff, put the comment in the `summary` instead.
-
-            IMPORTANT: Return your review as structured output matching the JSON schema.
-            - summary: High-level overview and status of fixes. Do NOT include granular code comments here; use the `comments` array. End with "## Veredito..." followed by "**Status**: (Aprovado/Requer Mudanças)\n\n**Justificativa**: <reasoning>".
-            - verdict: COMMENT (for approval or suggestions) or REQUEST_CHANGES (blocking issues).
-            - comments: Array of inline comments with path, line, body. Use this for ALL specific code feedback.
-            - replies: Array of replies to existing comments.
-            
-            All text in Brazilian Portuguese.
-          
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: ${{ env.REVIEW_PROMPT }}
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://code.claude.com/docs/en/cli-reference for available options
           claude_args: >-
-            --model ${{ needs.gather_context.outputs.ai_model }}
-            --allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*)"
-            --json-schema '{
-              "type": "object",
-              "properties": {
-                "summary": {"type": "string", "description": "Full review summary in markdown"},
-                "verdict": {"type": "string", "enum": ["REQUEST_CHANGES", "COMMENT"]},
-                "comments": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "path": {"type": "string"},
-                      "line": {"type": "integer"},
-                      "body": {"type": "string"}
-                    },
-                    "required": ["path", "line", "body"]
-                  }
-                },
-                "replies": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "reply_to_id": {"type": "string", "description": "ID of the comment to reply to (node_id or database id)"},
-                      "body": {"type": "string"}
-                    },
-                    "required": ["reply_to_id", "body"]
-                  }
-                }
-              },
-              "required": ["summary", "verdict", "comments"]
-            }'
+            --model ${{ steps.set-model.outputs.AI_MODEL }}
+            --allowed-tools "${{ env.REVIEW_TOOLS }}"
 
-  publish_review:
-    needs: analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Post review to PR
+      # The action exits 0 even when the agent gives up, so the step outcome
+      # alone cannot tell a real review from a silent no-op. A published comment
+      # is the only reliable signal, and it is what decides the fallback.
+      - name: Check whether the Anthropic review was published
+        id: claude-result
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          STRUCTURED='${{ needs.analysis.outputs.structured_output }}'
-          
-          if [ -z "$STRUCTURED" ] || [ "$STRUCTURED" = "null" ]; then
-            echo "No structured output from Claude!"
+          COUNT=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --paginate --jq '.[] | select(.user.login == "claude[bot]") | .id' | wc -l)
+          BEFORE=${{ steps.comments-before.outputs.count }}
+          if [ "$COUNT" -gt "$BEFORE" ]; then
+            echo "published=true" >> $GITHUB_OUTPUT
+            echo "Review publicada pelo provider Anthropic (antes: $BEFORE, depois: $COUNT)."
+          else
+            echo "published=false" >> $GITHUB_OUTPUT
+            echo "Provider Anthropic não publicou review (step: ${{ steps.claude-review.outcome }})."
+          fi
+
+      # Fallback: same prompt and tools, served by z.ai (GLM). Runs only when the
+      # Anthropic attempt produced no review — quota, API error or silent give-up.
+      - name: Run Code Review with z.ai fallback
+        id: zai-review
+        if: >-
+          steps.workflow-diff.outputs.changed != 'true' &&
+          steps.claude-result.outputs.published != 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
+          API_TIMEOUT_MS: "3000000"
+        with:
+          anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: ${{ env.REVIEW_PROMPT }}
+          claude_args: >-
+            --model ${{ env.ZAI_MODEL }}
+            --allowed-tools "${{ env.REVIEW_TOOLS }}"
+
+      # Without this, a run where both providers reviewed nothing would be
+      # indistinguishable from one that approved. This checks the outcome (a
+      # published comment) instead of dumping the agent's full output, which
+      # would leak file contents into public logs.
+      - name: Ensure the review was published
+        if: steps.workflow-diff.outputs.changed != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --paginate --jq '.[] | select(.user.login == "claude[bot]") | .id' | wc -l)
+          BEFORE=${{ steps.comments-before.outputs.count }}
+          if [ "$COUNT" -le "$BEFORE" ]; then
+            echo "::error::Nenhum provider publicou review (antes: $BEFORE, depois: $COUNT). Anthropic: ${{ steps.claude-review.outcome }}, z.ai: ${{ steps.zai-review.outcome }}. Rode com ACTIONS_STEP_DEBUG=true para ver a saída completa."
             exit 1
           fi
-          
-          SUMMARY=$(echo "$STRUCTURED" | jq -r '.summary')
-          VERDICT=$(echo "$STRUCTURED" | jq -r '.verdict')
-          COMMENTS=$(echo "$STRUCTURED" | jq -c '.comments // []')
-          REPLIES=$(echo "$STRUCTURED" | jq -c '.replies // []')
-          
-          # 1. Post Main Review
-          PAYLOAD=$(jq -n \
-            --arg commit_id "${{ github.event.pull_request.head.sha }}" \
-            --arg event "$VERDICT" \
-            --arg body "$SUMMARY" \
-            --argjson comments "$COMMENTS" \
-            '{commit_id: $commit_id, event: $event, body: $body, comments: $comments}')
-          
-          echo "Posting review..."
-          echo "$PAYLOAD" | gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews --input -
-          
-          # 2. Post Replies to existing threads
-          echo "$REPLIES" | jq -c '.[]' | while read -r reply; do
-            REPLY_TO_ID=$(echo "$reply" | jq -r .reply_to_id)
-            BODY=$(echo "$reply" | jq -r .body)
-            
-            [ -z "$REPLY_TO_ID" ] && continue
-            
-            echo "Replying to comment $REPLY_TO_ID..."
-            gh api "repos/${{ github.repository }}/pulls/comments/$REPLY_TO_ID/replies" \
-               -f body="$BODY" || echo "Failed to reply to $REPLY_TO_ID"
-          done
+          if [ "${{ steps.claude-result.outputs.published }}" == "true" ]; then
+            echo "Review publicada pelo provider Anthropic (antes: $BEFORE, depois: $COUNT)."
+          else
+            echo "Review publicada pelo fallback z.ai / ${{ env.ZAI_MODEL }} (antes: $BEFORE, depois: $COUNT)."
+          fi

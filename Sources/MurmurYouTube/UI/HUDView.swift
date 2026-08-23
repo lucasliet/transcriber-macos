@@ -52,11 +52,13 @@ struct HUDView: View {
 
     private var label: String {
         switch controller.state {
-        case .starting: "Listening…"
-        case .listening: controller.transcript.isEmpty ? "Listening…" : controller.transcript
+        case .starting: "Ouvindo…"
+        case .listening: controller.transcript.isEmpty ? "Ouvindo…" : controller.transcript
         // Parakeet transcribes in one pass on release, so there's nothing to show until
         // it lands — say what's happening instead of leaving an empty pill.
-        case .finishing: controller.transcript.isEmpty ? "Transcribing…" : controller.transcript
+        case .finishing: controller.transcript.isEmpty ? "Transcrevendo…" : controller.transcript
+        // Held for a beat after injection so you can see what was actually typed.
+        case .success(let text): text
         case .error(let message): message
         case .idle: ""
         }

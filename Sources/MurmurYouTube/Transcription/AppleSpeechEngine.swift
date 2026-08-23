@@ -19,7 +19,13 @@ actor AppleSpeechEngine: TranscriptionEngine {
     /// but discarded as soon as a final result covering the same range arrives.
     private var finalizedText = ""
 
-    init(locale: Locale = Locale.current) {
+    /// pt-BR by default, not `Locale.current`.
+    ///
+    /// `Locale.current` follows the *system* language, so a Mac set to English would
+    /// transcribe Portuguese speech as English — and it fails silently, producing plausible
+    /// nonsense rather than an error. This app is used in Portuguese; the locale is pinned
+    /// to match, exactly as it was before.
+    init(locale: Locale = Locale(identifier: "pt-BR")) {
         self.locale = locale
     }
 

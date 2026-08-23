@@ -7,10 +7,12 @@ whatever text field has focus. A Wispr Flow-shaped app, built native and fully o
 Branding and the LLM cleanup tier are the next passes.
 
 > **Provenance.** The macOS and Windows apps here started as
-> [`per-simmons/murmur-youtube`](https://github.com/per-simmons/murmur-youtube). The
-> addition in this fork is a third speech engine: **ElevenLabs Scribe with no API key**,
-> ported from the earlier `transcriber-macos` app this repository used to hold. See
-> [docs/ELEVENLABS.md](docs/ELEVENLABS.md).
+> [`per-simmons/murmur-youtube`](https://github.com/per-simmons/murmur-youtube). Two
+> things were added on top, both carried over from the earlier `transcriber-macos` app
+> this repository used to hold: a third speech engine — **ElevenLabs Scribe with no API
+> key** ([docs/ELEVENLABS.md](docs/ELEVENLABS.md)) — and the features that app had and
+> this one didn't, listed under [Carried over](#carried-over-from-transcriber-macos).
+> The interface is in Brazilian Portuguese.
 
 ---
 
@@ -121,6 +123,24 @@ because `AudioCapture` always allocates fresh storage before handing off.
 **Two swappable seams.** `TranscriptionEngine` and `TextFormatter` are protocols so the
 two components most likely to change can change without touching anything else.
 
+### Carried over from `transcriber-macos`
+
+Everything the previous app did that Murmur YouTube didn't, reimplemented against this
+architecture rather than bolted on:
+
+| | Where |
+|---|---|
+| **Self-update** — daily check against GitHub Releases, downloads the zip, swaps the bundle (asking for admin only when `/Applications` isn't writable) and relaunches | `Support/UpdateManager.swift` |
+| **Custom hotkey** — any key plus ⌃⌥⇧⌘, not only the three bare modifiers | `Core/KeyCombination.swift`, `Core/HotkeyMonitor.swift` |
+| **Hybrid recording mode** — hold to talk, or *tap* (under a second) to latch recording on until the next press | `Core/HotkeyMonitor.swift` |
+| **Notch overlay** — grows out of the MacBook's physical cutout, shows the elapsed timer, a lock glyph while latched, and the icon of the app the text will land in | `UI/NotchPanel.swift`, `UI/NotchIndicatorView.swift` |
+| **Plain-text log** — `/tmp/murmur-youtube.log`, capped at 50 lines, `tail -f`-able, alongside the unified log | `Support/FileLog.swift` |
+| **pt-BR speech locale** — pinned rather than following the system language | `Transcription/AppleSpeechEngine.swift` |
+
+The notch overlay needs a real notch. On an external display or a non-notch Mac it falls
+back to the floating HUD, which is what the old app should have done and didn't — it simply
+showed nothing there.
+
 ### Layout
 
 ```
@@ -141,9 +161,14 @@ Sources/MurmurYouTube/
 │   └── TextFormatter.swift         protocol + RuleBasedFormatter
 ├── UI/
 │   ├── HUDPanel.swift              non-activating floating panel
-│   └── HUDView.swift               waveform + live transcript, Brand palette
+│   ├── HUDView.swift               waveform + live transcript, Brand palette
+│   ├── NotchPanel.swift            notch geometry + the panel that hosts it
+│   ├── NotchIndicatorView.swift    timer, app icon, live text, latch glyph
+│   └── HotkeyRecorder.swift        captures a custom key combination
 └── Support/
     ├── Settings.swift, Permissions.swift, Log.swift
+    ├── FileLog.swift               /tmp mirror of the events that matter
+    └── UpdateManager.swift         self-update from GitHub Releases
 ```
 
 ---

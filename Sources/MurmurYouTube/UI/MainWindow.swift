@@ -18,7 +18,7 @@ struct MainWindow: View {
         case dictionary
 
         var id: String { rawValue }
-        var title: String { self == .transcriptions ? "Transcriptions" : "Dictionary" }
+        var title: String { self == .transcriptions ? "Transcrições" : "Dicionário" }
     }
 
     var body: some View {
@@ -78,15 +78,15 @@ private struct TransportPanel: View {
     @State private var elapsed: TimeInterval = 0
     @State private var startedAt: Date?
 
-    private var isRecording: Bool { controller.state.isActive }
+    private var isRecording: Bool { controller.state.isBusy }
 
     var body: some View {
         HStack(spacing: DS.Space.roomy) {
             VStack(alignment: .leading, spacing: DS.Space.snug) {
-                Silkscreen(text: "Transport")
+                Silkscreen(text: "Controles")
                 HStack(spacing: DS.Space.snug) {
                     TransportKey(
-                        title: isRecording ? "Stop" : "Record",
+                        title: isRecording ? "Parar" : "Gravar",
                         systemImage: isRecording ? "stop.fill" : "circle.fill",
                         isEngaged: isRecording
                     ) {
@@ -106,13 +106,13 @@ private struct TransportPanel: View {
             }
 
             VStack(alignment: .leading, spacing: DS.Space.tight) {
-                Silkscreen(text: "Level")
+                Silkscreen(text: "Nível")
                 VUMeter(level: controller.level, isActive: isRecording)
                     .frame(width: 168, height: 54)
             }
 
             VStack(alignment: .leading, spacing: DS.Space.tight) {
-                Silkscreen(text: "Counter")
+                Silkscreen(text: "Contador")
                 DeckWindow {
                     Readout(text: counterText, large: true)
                         .padding(.horizontal, DS.Space.base)
@@ -129,7 +129,7 @@ private struct TransportPanel: View {
         }
         .padding(DS.Space.roomy)
         .background(BrushedPanel())
-        .onChange(of: controller.state.isActive) { _, active in
+        .onChange(of: controller.state.isBusy) { _, active in
             startedAt = active ? Date() : nil
             if !active { elapsed = 0 }
         }
@@ -166,12 +166,12 @@ private struct TranscriptionList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SearchField(text: $query, placeholder: "Search transcriptions")
+            SearchField(text: $query, placeholder: "Buscar transcrições")
 
             if runs.isEmpty {
                 EmptyPanel(
-                    label: store.runs.isEmpty ? "No recordings" : "No matches",
-                    detail: store.runs.isEmpty ? "Press Record to start." : "Try a different search."
+                    label: store.runs.isEmpty ? "Nenhuma gravação" : "Nada encontrado",
+                    detail: store.runs.isEmpty ? "Aperte Gravar para começar." : "Tente outra busca."
                 )
             } else {
                 ScrollView {
@@ -197,7 +197,7 @@ private struct TranscriptionList: View {
             )
             Spacer()
             Button { isConfirmingClear = true } label: {
-                Silkscreen(text: "Delete all", color: DS.Color.inkOnDeck.opacity(0.5))
+                Silkscreen(text: "Apagar tudo", color: DS.Color.inkOnDeck.opacity(0.5))
             }
             .buttonStyle(.plain)
         }
@@ -210,14 +210,14 @@ private struct TranscriptionList: View {
         // Confirmed, unlike a single row: one row is trivially re-recorded, the whole
         // history is not, and there's no undo.
         .confirmationDialog(
-            "Delete all \(store.runs.count) recordings?",
+            "Apagar todas as \(store.runs.count) gravações?",
             isPresented: $isConfirmingClear,
             titleVisibility: .visible
         ) {
-            Button("Delete All", role: .destructive) { RunLog.clear() }
-            Button("Cancel", role: .cancel) {}
+            Button("Apagar tudo", role: .destructive) { RunLog.clear() }
+            Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("This can't be undone.")
+            Text("Não dá para desfazer.")
         }
     }
 }
@@ -274,7 +274,7 @@ private struct TranscriptionRow: View {
             }
         } label: {
             Silkscreen(
-                text: didCopy ? "Copied" : "Copy",
+                text: didCopy ? "Copiado" : "Copiar",
                 color: DS.Color.inkOnDeck.opacity(didCopy ? 1 : 0.6)
             )
             .padding(.horizontal, DS.Space.snug)
@@ -303,7 +303,7 @@ private struct TranscriptionRow: View {
                 )
         }
         .buttonStyle(.plain)
-        .help("Delete this transcription")
+        .help("Apagar esta transcrição")
     }
 }
 
@@ -314,7 +314,7 @@ private struct CorrectionBadges: View {
 
     var body: some View {
         HStack(spacing: DS.Space.snug) {
-            Silkscreen(text: "Corrected", color: DS.Color.meterAmber)
+            Silkscreen(text: "Corrigido", color: DS.Color.meterAmber)
             ForEach(corrections, id: \.self) { correction in
                 HStack(spacing: DS.Space.tight) {
                     Text(correction.from)
