@@ -1,0 +1,101 @@
+import Foundation
+import Observation
+
+/// Which speech engine transcribes an utterance.
+enum SpeechEngineChoice: String, CaseIterable, Sendable {
+    case apple
+    case parakeet
+    case elevenlabs
+
+    var displayName: String {
+        switch self {
+        case .apple: "Apple (streaming)"
+        case .parakeet: "Parakeet (batch)"
+        case .elevenlabs: "ElevenLabs (cloud)"
+        }
+    }
+
+    /// Short label for the settings window's key row.
+    var shortName: String {
+        switch self {
+        case .apple: "Apple"
+        case .parakeet: "Parakeet"
+        case .elevenlabs: "ElevenLabs"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .apple:
+            "Apple's on-device transcriber. Streams text while you speak; no download."
+        case .parakeet:
+            "Parakeet on the Neural Engine. Resolves on release; ~470 MB model."
+        case .elevenlabs:
+            "ElevenLabs Scribe over the network — no API key, no account. Streams while you "
+            + "speak, falls back to a single batch request and then to Apple's engine."
+        }
+    }
+
+    /// Parakeet only resolves on release; the other two stream.
+    var showsLiveText: Bool { self != .parakeet }
+
+    /// The only engine that leaves the machine.
+    var isCloud: Bool { self == .elevenlabs }
+}
+
+@MainActor
+@Observable
+final class Settings {
+    static let shared = Settings()
+
+    var pushToTalkKey: PushToTalkKey {
+        didSet { defaults.set(pushToTalkKey.rawValue, forKey: Keys.pushToTalkKey) }
+    }
+
+    var engine: SpeechEngineChoice {
+        didSet { defaults.set(engine.rawValue, forKey: Keys.engine) }
+    }
+
+    /// Run every engine on each recording and show them side by side, instead of
+    /// transcribing with one. Nothing is typed into the focused app in this mode.
+    var compareMode: Bool {
+        didSet { defaults.set(compareMode, forKey: Keys.compareMode) }
+    }
+
+    /// Run the cleanup pass before injecting. Off = raw engine output.
+    var cleanupEnabled: Bool {
+        didSet { defaults.set(cleanupEnabled, forKey: Keys.cleanupEnabled) }
+    }
+
+    /// Use the on-device LLM for cleanup instead of the deterministic rule pass.
+    var smartCleanup: Bool {
+        didSet { defaults.set(smartCleanup, forKey: Keys.smartCleanup) }
+    }
+
+    /// Play a short tick when capture starts and stops.
+    var soundEnabled: Bool {
+        didSet { defaults.set(soundEnabled, forKey: Keys.soundEnabled) }
+    }
+
+    private let defaults = UserDefaults.standard
+
+    private enum Keys {
+        static let pushToTalkKey = "pushToTalkKey"
+        static let cleanupEnabled = "cleanupEnabled"
+        static let soundEnabled = "soundEnabled"
+        static let engine = "engine"
+        static let smartCleanup = "smartCleanup"
+        static let compareMode = "compareMode"
+    }
+
+    private init() {
+        let raw = defaults.string(forKey: Keys.pushToTalkKey) ?? PushToTalkKey.rightOption.rawValue
+        pushToTalkKey = PushToTalkKey(rawValue: raw) ?? .rightOption
+        // Apple by default: no download, no dependency, live text while speaking.
+        engine = SpeechEngineChoice(rawValue: defaults.string(forKey: Keys.engine) ?? "") ?? .apple
+        cleanupEnabled = defaults.object(forKey: Keys.cleanupEnabled) as? Bool ?? true
+        smartCleanup = defaults.object(forKey: Keys.smartCleanup) as? Bool ?? false
+        compareMode = defaults.object(forKey: Keys.compareMode) as? Bool ?? false
+        soundEnabled = defaults.object(forKey: Keys.soundEnabled) as? Bool ?? true
+    }
+}

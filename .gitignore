@@ -1,29 +1,24 @@
-# Build
-build/
+# macOS build
 .build/
-DerivedData/
-
-# Xcode
-*.xcodeproj/xcuserdata/
-*.xcworkspace/xcuserdata/
-*.xcuserstate
-
-# Swift Package Manager
-.swiftpm/
-Package.resolved
-
-# macOS
+*.xcuserdatad
 .DS_Store
-*.dSYM
 
-# Temporary files
-*.tmp
-*.temp
+# Built .app bundles, at the repo root ONLY.
+#
+# Anchored deliberately. An unanchored `*.app/` also matches `windows/src/Murmur.App/`,
+# because macOS filesystems are case-insensitive — which silently kept the entire Avalonia
+# app out of the repo until a CI publish step failed to find the project file.
+/*.app/
 
-# Reference projects
-typewhisper-mac/
-elevenlabs-transcribe-wrapper/
+# Windows / .NET build
+[Bb]in/
+[Oo]bj/
+*.user
+.vs/
+artifacts/
 
-# IDE
-.claude/
-.agents/
+# Local ASR model weights. Large, redistributed under their own license, and every
+# platform fetches them itself — see docs/PARAKEET-WINDOWS.md.
+models/
+*.onnx
+*.nemo

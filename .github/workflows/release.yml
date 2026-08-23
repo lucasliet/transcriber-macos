@@ -34,29 +34,29 @@ jobs:
           # Get previous tag or root
           PREV_TAG=$(git describe --tags --abbrev=0 --match "v*" HEAD^ 2>/dev/null || echo "")
           if [ -z "$PREV_TAG" ]; then RANGE="HEAD"; else RANGE="$PREV_TAG..HEAD"; fi
-          
+
           # Get Git Log for Context
           GIT_LOG=$(git log $RANGE --pretty=format:"%h - %s (%an)")
-          
+
           # Run Copilot
           copilot --model $AI_MODEL -p "
             REPO: ${{ github.repository }}
             VERSION: ${{ github.ref_name }}
-            
+
             CHANGES:
             $GIT_LOG
-            
+
             TASK: Generate meaningful release notes for this version based on the changes above.
-            
+
             GUIDELINES:
-            - Start with the title '# Transcriber ${{ github.ref_name }}'
+            - Start with the title '# Murmur YouTube ${{ github.ref_name }}'
             - Write a brief, engaging summary paragraph explaining what this release achieves.
             - Group changes into '## Key Features' (if there are any) and '## Bug Fixes' (if there are any).
             - Use bullet points.
             - Be concise but descriptive.
             - Ignore trivial commits (docs, chores) unless significant.
             - DO NOT USE EMOJIS anywhere in the output. Use standard Markdown only.
-            
+
             Output ONLY the markdown content using ---review--- marker as start.
           " > temp_review.md
 
@@ -65,19 +65,19 @@ jobs:
           if [ -f temp_review.md ]; then
             awk '/---review---/{found=1; next} found' temp_review.md > RELEASE_BODY.md
           fi
-          
+
           # Fallback: Use last commit message if extraction failed or file missing
           if [ ! -s RELEASE_BODY.md ]; then
             git log -1 --pretty=%B > RELEASE_BODY.md
           fi
-          
+
           # Append Footer always
           echo "" >> RELEASE_BODY.md
           echo "## Getting Started" >> RELEASE_BODY.md
-          echo "1. Download \`Transcriber.zip\` below." >> RELEASE_BODY.md
-          echo "2. Unzip and drag to **Applications**." >> RELEASE_BODY.md
+          echo "1. Download \`MurmurYouTube.zip\` below." >> RELEASE_BODY.md
+          echo "2. Unzip and drag **Murmur YouTube.app** to **Applications**." >> RELEASE_BODY.md
           echo "3. Grant **Accessibility** and **Microphone** permissions on first run." >> RELEASE_BODY.md
-      
+
       - name: Set Output
         id: set_output
         run: |
@@ -95,31 +95,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Package.swift declares swift-tools-version 6.2. Select the newest Xcode present
+      # rather than pinning a version that will age out of the runner image.
+      - name: Select the newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+
       - name: Set App Version
         run: |
           # Extract version from tag (remove 'v' prefix)
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}
           echo "Setting app version to $VERSION"
-          
-          # Update Info.plist
-          plutil -replace CFBundleShortVersionString -string "$VERSION" Info.plist
-          plutil -replace CFBundleVersion -string "$VERSION" Info.plist
 
+          plutil -replace CFBundleShortVersionString -string "$VERSION" Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$VERSION" Resources/Info.plist
+
+      # `make app` builds with SwiftPM, assembles the bundle and signs it. There is no
+      # Developer ID on the runner, so `SIGN_ID` falls back to ad-hoc — same as before.
       - name: Build App
-        run: |
-          chmod +x build.sh
-          ./build.sh
+        run: make app CONFIG=release
 
       - name: Create ZIP
         run: |
-          cd build
-          ditto -c -k --keepParent Transcriber.app Transcriber.zip
+          STAGE="$HOME/Library/Caches/MurmurYouTubeBuild"
+          mkdir -p build
+          ditto -c -k --keepParent "$STAGE/Murmur YouTube.app" build/MurmurYouTube.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/Transcriber.zip
+          files: build/MurmurYouTube.zip
           draft: false
           prerelease: false
           body: ${{ needs.generate-notes.outputs.release_notes }}
