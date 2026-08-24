@@ -6,13 +6,15 @@ whatever text field has focus. A Wispr Flow-shaped app, built native and fully o
 **Status:** working skeleton. Builds, launches, arms the hotkey, transcribes, injects.
 Branding and the LLM cleanup tier are the next passes.
 
-> **Provenance.** The macOS and Windows apps here started as
-> [`per-simmons/murmur-youtube`](https://github.com/per-simmons/murmur-youtube). Two
-> things were added on top, both carried over from the earlier `transcriber-macos` app
-> this repository used to hold: a third speech engine — **ElevenLabs Scribe with no API
-> key** ([docs/ELEVENLABS.md](docs/ELEVENLABS.md)) — and the features that app had and
-> this one didn't, listed under [Carried over](#carried-over-from-transcriber-macos).
-> The interface is in Brazilian Portuguese.
+> **Provenance.** This app started as
+> [`per-simmons/murmur-youtube`](https://github.com/per-simmons/murmur-youtube), which also
+> shipped a Windows/Avalonia reimplementation alongside the macOS app; that half was removed
+> here, so this repo is macOS-only. Two things were added on top, both carried over from the
+> earlier `transcriber-macos` app this repository used to hold: a third speech engine —
+> **ElevenLabs Scribe with no API key** ([docs/ELEVENLABS.md](docs/ELEVENLABS.md)) — and the
+> features that app had and this one didn't, listed under
+> [Carried over](#carried-over-from-transcriber-macos). The interface is in Brazilian
+> Portuguese.
 
 ---
 

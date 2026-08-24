@@ -3,11 +3,9 @@ import Testing
 
 @testable import MurmurDictionary
 
-/// Runs the shared behavioural contract in `shared/dictionary-test-vectors.json`.
-///
-/// The Windows app reimplements this logic in C# and runs the identical file. That's the
-/// only thing keeping two independent implementations honest — there's no shared binary, and
-/// no Windows machine to check against by hand.
+/// Runs the behavioural contract in `dictionary-test-vectors.json` against
+/// `DictionaryCorrector`. Change how corrections work by changing the vectors first, watch
+/// this go red, then make it green — not the other way around.
 struct VectorTests {
     struct Vectors: Decodable {
         let version: Int

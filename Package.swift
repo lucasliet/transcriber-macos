@@ -10,9 +10,8 @@ let package = Package(
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.6")
     ],
     targets: [
-        // The dictionary is its own target so it can be tested directly, and because its
-        // behaviour is a cross-platform contract: the Windows app reimplements this logic in
-        // C#, and both sides run the same vectors in shared/dictionary-test-vectors.json.
+        // The dictionary is its own target so it can be tested directly against the
+        // behavioural contract in Tests/MurmurDictionaryTests/dictionary-test-vectors.json.
         .target(
             name: "MurmurDictionary",
             path: "Sources/MurmurDictionary",
