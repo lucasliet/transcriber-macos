@@ -208,24 +208,28 @@ final class HCaptchaSolver: NSObject {
 }
 
 extension HCaptchaSolver: WKScriptMessageHandler {
-    /// `WKScriptMessage` isn't `Sendable`, so the two strings are read here and the object
-    /// itself never crosses. The hop is `Task { @MainActor }` rather than
-    /// `assumeIsolated` — see AGENTS.md; that call asserts the claim instead of checking it.
+    /// `assumeIsolated`, deliberately — the exception AGENTS.md allows for a callback that
+    /// genuinely runs on the main thread, same as the event tap in `HotkeyMonitor`.
+    ///
+    /// A `Task { @MainActor }` is not an option here: `WKScriptMessage` is main-actor
+    /// isolated in the SDK, so its properties cannot be read from a nonisolated context to
+    /// hand across, and the message itself is not `Sendable` so it cannot be captured.
+    /// Resuming synchronously is also better behaviour — the continuation completes before
+    /// the WebView is torn down rather than a hop later.
     nonisolated func userContentController(
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        let name = message.name
-        let body = message.body as? String ?? ""
-        Task { @MainActor in
-            guard name == "hcaptcha", !body.isEmpty else { return }
+        MainActor.assumeIsolated {
+            let body = message.body as? String ?? ""
+            guard message.name == "hcaptcha", !body.isEmpty else { return }
 
             if body.hasPrefix("ERROR:") {
-                self.finish(with: .failure(HCaptchaError.webView(String(body.dropFirst(6)))))
+                finish(with: .failure(HCaptchaError.webView(String(body.dropFirst(6)))))
                 return
             }
             Log.speech.info("hCaptcha · token obtained")
-            self.finish(with: .success(body))
+            finish(with: .success(body))
         }
     }
 }
@@ -243,9 +247,10 @@ extension HCaptchaSolver: WKNavigationDelegate {
         fail(error)
     }
 
+    /// Navigation callbacks are main-thread too; see the note on the message handler.
     private nonisolated func fail(_ error: Error) {
         let message = error.localizedDescription
-        Task { @MainActor in self.finish(with: .failure(HCaptchaError.webView(message))) }
+        MainActor.assumeIsolated { finish(with: .failure(HCaptchaError.webView(message))) }
     }
 }
 

@@ -484,6 +484,8 @@ private extension Data {
     }
 
     mutating func append<T: FixedWidthInteger>(littleEndian value: T) {
-        withUnsafeBytes(of: value.littleEndian) { append(contentsOf: $0) }
+        // Qualified: inside an extension on Data the bare name resolves to Data's own
+        // instance method `withUnsafeBytes(_:)`, not the global `withUnsafeBytes(of:_:)`.
+        Swift.withUnsafeBytes(of: value.littleEndian) { append(contentsOf: $0) }
     }
 }
