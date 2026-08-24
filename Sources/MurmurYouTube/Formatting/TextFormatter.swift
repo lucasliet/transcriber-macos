@@ -14,14 +14,26 @@ protocol TextFormatter: Sendable {
 /// the fallback when a model-backed formatter is unavailable or times out.
 struct RuleBasedFormatter: TextFormatter {
     /// Standalone filler words, stripped only when surrounded by word boundaries.
-    private static let fillers = ["um", "uh", "erm", "uhm", "hmm", "mhm"]
+    ///
+    /// **`um` is deliberately absent.** It is the Portuguese indefinite article, and this
+    /// app transcribes pt-BR — the pattern below is case-insensitive and matches whole
+    /// words, so including it turned "preciso de um teste" into "preciso de teste" in
+    /// every dictation containing the article.
+    ///
+    /// `né` is absent for the same class of reason: it is a tag question, not filler, and
+    /// the trailing-comma rule below would turn "você vem, né?" into "você vem?".
+    private static let fillers = ["uh", "erm", "uhm", "hmm", "mhm", "hã", "ãh", "ahn", "éh"]
 
     /// Spoken punctuation people actually use mid-dictation.
+    ///
+    /// In Portuguese, since that is what the engines are asked to transcribe. Only the
+    /// structural commands are here: "ponto final" and "vírgula" are said far too often
+    /// as ordinary speech to rewrite blindly.
     private static let spokenPunctuation: [(String, String)] = [
-        ("new paragraph", "\n\n"),
-        ("new line", "\n"),
-        ("open paren", " ("),
-        ("close paren", ") "),
+        ("novo parágrafo", "\n\n"),
+        ("nova linha", "\n"),
+        ("abre parênteses", " ("),
+        ("fecha parênteses", ") "),
     ]
 
     func format(_ raw: String) async -> String {

@@ -14,7 +14,7 @@ enum FileLog {
 
     private static let queue = DispatchQueue(label: "ai.pivotstudio.murmur-youtube.filelog", qos: .utility)
 
-    nonisolated(unsafe) private static let formatter: DateFormatter = {
+    private static let formatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return formatter
@@ -27,9 +27,9 @@ enum FileLog {
 
     /// Writes on a utility queue: a dictation path should never block on disk.
     ///
-    /// The timestamp is formatted *inside* the queue too. `DateFormatter` is not
-    /// thread-safe, and callers here span the main actor, the hotkey tap and the engine
-    /// actors — formatting at the call site would be a real race.
+    /// The timestamp is captured at the call site but *formatted* inside the queue, so
+    /// the caller — which may be the main actor, the hotkey tap or an engine actor — pays
+    /// for nothing but a `Date()`.
     private static func write(_ level: String, _ message: String) {
         let now = Date()
         queue.async {

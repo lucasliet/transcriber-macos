@@ -345,7 +345,8 @@ final class DictationController {
         hotkey.resetLatch()
         audioContinuation?.finish()
         audioContinuation = nil
-        await feedTask?.value
+        // Awaited for the drain, not the recording it returns — that's compare mode's.
+        _ = await feedTask?.value
         feedTask = nil
         await engine?.finish()
         engine = nil

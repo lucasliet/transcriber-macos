@@ -8,7 +8,15 @@ CONFIG   := debug
 ## the build" on random object files, and occasionally a wedged swift-frontend stuck at
 ## 0% CPU. Moving the scratch path to ~/Library/Caches (never synced) removes the race.
 SCRATCH  := $(HOME)/Library/Caches/MurmurYouTubeBuild/scratch
-BUILD    := $(SCRATCH)/$(CONFIG)/$(EXEC)
+
+## Ask SwiftPM where it put the binary instead of reconstructing the path. The real
+## layout under --scratch-path is <triple>/<config>/, reachable today only through a
+## convenience symlink that is an implementation detail; --show-bin-path is the supported
+## answer and survives a layout change.
+##
+## Recursive (`=`, not `:=`) on purpose: this has to expand when the `app` recipe runs,
+## after `build` has completed — not while the makefile is being parsed.
+BUILD = $(shell swift build -c $(CONFIG) --scratch-path "$(SCRATCH)" --show-bin-path)/$(EXEC)
 
 ## The bundle is assembled and signed OUTSIDE this directory on purpose.
 ##

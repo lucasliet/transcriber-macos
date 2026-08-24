@@ -102,17 +102,27 @@ final class HCaptchaSolver: NSObject {
         }
     }
 
+    /// Times out by resuming the pending continuation, not by racing tasks.
+    ///
+    /// A `withThrowingTaskGroup` race is the obvious shape here and it is wrong twice
+    /// over. The region-based isolation checker rejects a `@MainActor` child closure
+    /// outright (it is a compiler limitation, not a diagnosis). And even compiling, the
+    /// timeout path would never finish: `solve()` suspends on a
+    /// `withCheckedThrowingContinuation`, which does not respond to cancellation, so
+    /// `cancelAll()` would leave the group awaiting a child that never completes —
+    /// `isSolving` stuck true, every later caller parked on it, the WebView never
+    /// released. One timeout and streaming ElevenLabs is dead until the app restarts.
+    ///
+    /// `finish(with:)` already funnels every outcome through the one continuation and
+    /// no-ops when it has been consumed, so a timeout is just one more outcome.
     private func solveWithTimeout() async throws -> String {
-        try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask { @MainActor in try await self.solve() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(HCaptcha.solveTimeout))
-                throw HCaptchaError.timeout
-            }
-            let token = try await group.next()!
-            group.cancelAll()
-            return token
+        let timeout = Task {
+            try? await Task.sleep(for: .seconds(HCaptcha.solveTimeout))
+            guard !Task.isCancelled else { return }
+            self.finish(with: .failure(HCaptchaError.timeout))
         }
+        defer { timeout.cancel() }
+        return try await solve()
     }
 
     private func solve() async throws -> String {
