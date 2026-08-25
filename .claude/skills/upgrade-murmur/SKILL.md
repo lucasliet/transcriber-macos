@@ -177,11 +177,16 @@ Detect the upstream branch:
 - Store the **bare branch name** in `UPSTREAM_BRANCH` — `main`, not `upstream/main`. Every
   command below writes `upstream/$UPSTREAM_BRANCH` itself, so storing the prefixed form
   yields `upstream/upstream/main` and silently breaks `BASE`, every diff, and the merge.
-- Verify before going further: `git rev-parse --verify "upstream/$UPSTREAM_BRANCH"`. If that
-  fails, stop — do not guess a branch name.
+- Verify it resolves: `git rev-parse --verify "upstream/$UPSTREAM_BRANCH"`. If that fails,
+  stop — do not guess a branch name.
 
 Fetch fresh:
 - `git fetch upstream --prune`
+- **Verify again, after the fetch.** `--prune` deletes remote-tracking refs whose upstream
+  branch is gone, so a branch that resolved a moment ago can disappear in this very step if
+  it was renamed or deleted upstream. Re-run
+  `git rev-parse --verify "upstream/$UPSTREAM_BRANCH"` and stop if it now fails — every
+  command from Step 2 onward builds on this ref.
 
 # Step 1: Safety net
 
@@ -259,16 +264,39 @@ git merge --abort
 **Rebase:** run it in a throwaway worktree so the real checkout is never left mid-rebase.
 `--detach` matters — git refuses to rebase a branch that is checked out in another worktree.
 ```bash
-PREVIEW=$(mktemp -d)/rebase-preview
-git worktree add --detach "$PREVIEW" HEAD
-if git -C "$PREVIEW" rebase "upstream/$UPSTREAM_BRANCH"; then
-  echo "rebase preview: clean"          # finished — do NOT call --abort, there is nothing to abort
-else
-  git -C "$PREVIEW" diff --name-only --diff-filter=U
-  git -C "$PREVIEW" rebase --abort
+PREVIEW="$(mktemp -d)/rebase-preview"
+
+# If the worktree can't be created, every `git -C "$PREVIEW"` below would run against a
+# path that doesn't exist and fail confusingly. Stop instead.
+if ! git worktree add --detach "$PREVIEW" HEAD; then
+  echo "rebase preview: could not create the worktree — stopping, nothing was changed"
+  return 2>/dev/null || exit 1
 fi
-git worktree remove --force "$PREVIEW"  # always, on both paths
+
+STATUS=0
+git -C "$PREVIEW" rebase "upstream/$UPSTREAM_BRANCH" || STATUS=$?
+
+if [ "$STATUS" -eq 0 ]; then
+  echo "rebase preview: clean"   # finished — there is no rebase in progress to --abort
+else
+  # A non-zero rebase does NOT imply a conflict: a bad ref, a failing hook or a broken
+  # worktree exit non-zero too. Unmerged paths are what actually distinguishes the two.
+  CONFLICTS="$(git -C "$PREVIEW" diff --name-only --diff-filter=U)"
+  if [ -n "$CONFLICTS" ]; then
+    printf 'rebase preview: would conflict in:\n%s\n' "$CONFLICTS"
+  else
+    echo "rebase preview: rebase FAILED for a non-conflict reason (exit $STATUS)"
+  fi
+  # Harmless if no rebase is actually in progress; that's why the failure is tolerated.
+  git -C "$PREVIEW" rebase --abort 2>/dev/null || true
+fi
+
+git worktree remove --force "$PREVIEW" || true   # always, on every path above
 ```
+
+**Never report "clean" on a non-zero rebase with no unmerged paths.** That is a real failure
+— surface the exit status and stop, rather than letting the user pick a strategy on the
+strength of a preview that never actually ran.
 
 **Cherry-pick:** there is no reliable dry run. Say so, and let the user resolve per commit in
 Step 4B instead of promising a preview this skill cannot give.
