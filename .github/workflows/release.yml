@@ -69,21 +69,40 @@ jobs:
           # Feed the prompt via stdin; --output-format text prints only the
           # final message to stdout, which we redirect to RELEASE_BODY.md.
           claude -p --model claude-haiku-4-5 --output-format text --max-turns 2 < prompt.txt > RELEASE_BODY.md
-          # An exit 0 with empty output still means no usable notes, so fail
-          # explicitly to let the Z.AI fallback step below take over.
-          [ -s RELEASE_BODY.md ]
+
+          # An auth failure prints its error to stdout and often still exits 0, so a plain
+          # `[ -s RELEASE_BODY.md ]` treats that error text as a successful release note —
+          # which is exactly what shipped in v2.0.0's release body. Reject known failure
+          # signatures explicitly, and empty the file on any failure so later steps have a
+          # single reliable signal: empty means "this provider did not produce notes."
+          if [ ! -s RELEASE_BODY.md ] || grep -qiE 'not logged in|please run /login|invalid api key|authentication_error|please run .claude|/login' RELEASE_BODY.md; then
+            : > RELEASE_BODY.md
+            exit 1
+          fi
 
       - name: Generate Release Notes with Z.AI (fallback)
         if: steps.haiku-release-notes.outcome == 'failure'
+        id: zai-release-notes
         continue-on-error: true
         env:
           ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.ZAI_API_KEY }}
-        run: claude -p --model glm-4.5-air --output-format text --max-turns 2 < prompt.txt > RELEASE_BODY.md
+        run: |
+          claude -p --model glm-4.5-air --output-format text --max-turns 2 < prompt.txt > RELEASE_BODY.md
+
+          # Same defense as the Haiku step above, and for the same reason: this is the
+          # step that actually shipped the "Not logged in" text as a release body once,
+          # because ZAI_API_KEY was unset and nothing downstream caught it.
+          if [ ! -s RELEASE_BODY.md ] || grep -qiE 'not logged in|please run /login|invalid api key|authentication_error|please run .claude|/login' RELEASE_BODY.md; then
+            : > RELEASE_BODY.md
+            exit 1
+          fi
 
       - name: Fallback on empty output
         run: |
-          # Fallback: Use last commit message if generation failed or file missing/empty
+          # Both providers above clear RELEASE_BODY.md on any failure (auth error,
+          # non-zero exit, or truly empty output), so emptiness here is a reliable signal
+          # that neither one produced usable notes — not just "the file was never written."
           if [ ! -s RELEASE_BODY.md ]; then
             git log -1 --pretty=%B > RELEASE_BODY.md
           fi
@@ -145,6 +164,10 @@ jobs:
           tag: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           removeArtifacts: true
+          # Without this, retagging an existing version (fixing a bad CI run by moving the
+          # tag and re-pushing) fails outright instead of republishing — the action's
+          # default refuses to touch a release that already exists for the tag.
+          allowUpdates: true
           body: |
             **Release Notes**
             ${{ needs.generate-notes.outputs.release_notes }}
