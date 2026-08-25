@@ -56,7 +56,9 @@ end so you can `git reset --hard` back.
 **Choice:** you pick merge (one-pass), cherry-pick (specific commits), rebase (linear
 history), or abort.
 
-**Conflict preview:** dry-run merge to show which files would conflict before you commit.
+**Conflict preview:** shows which files would conflict before anything is committed, using
+the strategy you picked — a dry-run merge for a merge, a throwaway worktree for a rebase.
+A merge dry-run does not predict rebase conflicts, so the two are not interchangeable.
 
 **Validation:** `swift build` after the merge (this fork has no `npm`/`package.json` — it's
 SwiftPM). If no Swift toolchain is available in the current environment (true for a
@@ -171,23 +173,43 @@ Confirm remotes with `git remote -v`. If `upstream` is missing:
 
 Detect the upstream branch:
 - `git branch -r | grep upstream/`
-- Prefer `upstream/main`. Fall back to `upstream/master`. If neither, ask.
-- Store as `UPSTREAM_BRANCH`. All commands below that reference `upstream/main` use
-  `upstream/$UPSTREAM_BRANCH` instead.
+- Prefer `main`. Fall back to `master`. If neither exists, ask.
+- Store the **bare branch name** in `UPSTREAM_BRANCH` — `main`, not `upstream/main`. Every
+  command below writes `upstream/$UPSTREAM_BRANCH` itself, so storing the prefixed form
+  yields `upstream/upstream/main` and silently breaks `BASE`, every diff, and the merge.
+- Verify before going further: `git rev-parse --verify "upstream/$UPSTREAM_BRANCH"`. If that
+  fails, stop — do not guess a branch name.
 
 Fetch fresh:
 - `git fetch upstream --prune`
 
 # Step 1: Safety net
 
-```
+```bash
 HASH=$(git rev-parse --short HEAD)
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-git branch backup/pre-upgrade-$HASH-$TIMESTAMP
-git tag pre-upgrade-$HASH-$TIMESTAMP
+STAMP=$(date +%Y%m%d-%H%M%S)
+ROLLBACK="pre-upgrade-$HASH-$STAMP"
+
+# A second run on the same commit within the same second would collide. Git refuses to
+# overwrite an existing branch or tag, so pick a fresh suffix instead of forcing.
+while git rev-parse --verify --quiet "refs/tags/$ROLLBACK" >/dev/null \
+   || git rev-parse --verify --quiet "refs/heads/backup/$ROLLBACK" >/dev/null; do
+  ROLLBACK="pre-upgrade-$HASH-$STAMP-$RANDOM"
+done
+
+git branch "backup/$ROLLBACK"
+git tag "$ROLLBACK"
+
+# The whole point of this step is that it happened. Prove it before touching anything.
+git rev-parse --verify "refs/heads/backup/$ROLLBACK" >/dev/null
+git rev-parse --verify "refs/tags/$ROLLBACK" >/dev/null
 ```
 
-Save the tag name. You'll print it in Step 7 for rollback.
+**If either verification fails, stop here.** Do not continue to Step 2 — a merge or rebase
+without a rollback point is the one thing this skill exists to prevent. Report the failure
+and let the user sort out the ref state.
+
+Save `$ROLLBACK`. You'll print it in Step 7 for rollback.
 
 # Step 2: Preview
 
@@ -223,10 +245,33 @@ If Abort: print rollback info and stop.
 
 # Step 3: Conflict preview (no commits yet)
 
-If Full update or Rebase, dry-run:
+Preview with the strategy the user actually picked — a merge dry-run does not predict rebase
+conflicts, because a rebase replays each local commit onto upstream separately and can
+conflict where a single merge would not.
+
+**Full update (merge):**
+```bash
+git merge --no-commit --no-ff "upstream/$UPSTREAM_BRANCH"
+git diff --name-only --diff-filter=U
+git merge --abort
 ```
-git merge --no-commit --no-ff upstream/$UPSTREAM_BRANCH; git diff --name-only --diff-filter=U; git merge --abort
+
+**Rebase:** run it in a throwaway worktree so the real checkout is never left mid-rebase.
+`--detach` matters — git refuses to rebase a branch that is checked out in another worktree.
+```bash
+PREVIEW=$(mktemp -d)/rebase-preview
+git worktree add --detach "$PREVIEW" HEAD
+if git -C "$PREVIEW" rebase "upstream/$UPSTREAM_BRANCH"; then
+  echo "rebase preview: clean"          # finished — do NOT call --abort, there is nothing to abort
+else
+  git -C "$PREVIEW" diff --name-only --diff-filter=U
+  git -C "$PREVIEW" rebase --abort
+fi
+git worktree remove --force "$PREVIEW"  # always, on both paths
 ```
+
+**Cherry-pick:** there is no reliable dry run. Say so, and let the user resolve per commit in
+Step 4B instead of promising a preview this skill cannot give.
 
 Show the conflict list. If empty, say "clean" and proceed — but still run Step 6's sweeps,
 since a clean merge is exactly how the permanent decisions get reintroduced silently. If
